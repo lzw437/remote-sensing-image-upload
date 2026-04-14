@@ -30,11 +30,11 @@ app.use((req, res, next) => {
     next();
 });
 
-// 处理 JSON 请求体
-app.use(express.json());
+// 处理 JSON 请求体（增加大小限制）
+app.use(express.json({ limit: '5gb' }));
 
-// 处理 URL 编码的请求体
-app.use(express.urlencoded({ extended: true }));
+// 处理 URL 编码的请求体（增加大小限制）
+app.use(express.urlencoded({ extended: true, limit: '5gb' }));
 
 // 配置 multer 存储（在 Vercel 上使用内存存储）
 const upload = multer({
