@@ -1105,21 +1105,21 @@
                     try {
                         const result = JSON.parse(xhr.responseText);
                         
-                        // 触发本地下载
+                        // 触发本地下载（使用本地文件，不依赖服务器）
                         downloadFile(URL.createObjectURL(item.file), item.file.name);
 
-                        alert('保存成功！文件已保存到数据库，并触发下载。');
+                        showNotification('保存成功！文件已保存到数据库，并触发下载。', 'success');
                         map.removeLayer(item.layer);
                         pendingLayers.splice(idx, 1);
                         renderPending();
                         fetchDB();
                     } catch (parseError) {
                         console.error('解析响应失败:', parseError);
-                        alert('保存失败: 服务器响应格式错误');
+                        showNotification('保存失败: 服务器响应格式错误', 'error');
                     }
                 } else {
                     console.error('上传失败:', xhr.status, xhr.statusText);
-                    alert('保存失败: ' + xhr.statusText);
+                    showNotification('保存失败: ' + xhr.statusText, 'error');
                 }
                 // 重置进度条
                 loadingHint.style.display = 'none';

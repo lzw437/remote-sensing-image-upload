@@ -36,24 +36,9 @@ app.use(express.json());
 // 处理 URL 编码的请求体
 app.use(express.urlencoded({ extended: true }));
 
-// 配置 multer 存储
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-    }
-});
-
+// 配置 multer 存储（在 Vercel 上使用内存存储）
 const upload = multer({
-    storage: storage,
+    storage: multer.memoryStorage(),
     limits: {
         fileSize: 5 * 1024 * 1024 * 1024 // 5GB 限制
     }
@@ -358,29 +343,15 @@ app.post('/api/images', upload.any(), async (req, res) => {
             return res.status(400).json({ error: '没有上传文件' });
         }
         
-        let filePaths = [];
-        let fileUrls = [];
+        let fileNames = [];
         let originalNames = [];
         
-        // 处理上传的文件
+        // 处理上传的文件（在 Vercel 上使用内存存储）
         for (const file of req.files) {
-            const { filename, path: filePath, originalname } = file;
-            filePaths.push(filePath);
-            fileUrls.push(`/uploads/${filename}`);
+            const { originalname } = file;
+            fileNames.push(originalname);
             originalNames.push(originalname);
-            
-            // 尝试备份到 E 盘
-            const backupDir = 'E:/remote_sensing_data';
-            try {
-                if (!fs.existsSync(backupDir)) {
-                    fs.mkdirSync(backupDir, { recursive: true });
-                }
-                const backupPath = path.join(backupDir, filename);
-                fs.copyFileSync(filePath, backupPath);
-                console.log('备份成功:', backupPath);
-            } catch (backupErr) {
-                console.warn('备份失败:', backupErr.message);
-            }
+            console.log('文件上传成功:', originalname);
         }
         
         let parsedBounds;
@@ -391,13 +362,14 @@ app.post('/api/images', upload.any(), async (req, res) => {
             parsedBounds = [];
         }
         
+        // 在 Vercel 上只存储元数据，不保存文件到本地
         const newImage = new Image({
             name,
             bounds: parsedBounds,
-            fileUrl: fileUrls[0], // 主文件URL
-            filePath: filePaths[0], // 主文件路径
-            filePaths, // 所有文件路径
-            fileUrls, // 所有文件URL
+            fileUrl: `https://remote-sensing-image-upload-597vynt9e-lzw437s-projects.vercel.app/api/download?id=${Date.now()}`, // 模拟URL
+            filePath: fileNames[0], // 存储文件名
+            filePaths: fileNames, // 所有文件名
+            fileUrls: fileNames.map(name => `https://remote-sensing-image-upload-597vynt9e-lzw437s-projects.vercel.app/api/download?name=${encodeURIComponent(name)}`), // 模拟URLs
             originalName: originalNames[0], // 主文件原始名称
             originalNames, // 所有原始文件名
             fileType: fileType || 'geotiff',
@@ -433,16 +405,8 @@ app.delete('/api/images/:id', async (req, res) => {
             return res.status(403).json({ error: '没有权限删除此影像' });
         }
         
-        // 删除文件
-        if (image.filePaths && image.filePaths.length > 0) {
-            for (const filePath of image.filePaths) {
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        } else if (image.filePath && fs.existsSync(image.filePath)) {
-            fs.unlinkSync(image.filePath);
-        }
+        // 在 Vercel 上不需要删除本地文件，只删除数据库记录
+        console.log('删除影像:', image._id);
         
         await Image.deleteOne({ _id: req.params.id });
         res.json({ message: '删除成功' });
@@ -465,46 +429,8 @@ app.get('/api/download', async (req, res) => {
             return res.status(404).json({ error: '文件不存在' });
         }
         
-        // 检查文件是否存在
-        if (!image.filePath || !fs.existsSync(image.filePath)) {
-            return res.status(404).json({ error: '文件不存在' });
-        }
-        
-        // 对于 shapefile，需要打包成 zip
-        if (image.fileType === 'shapefile' && image.filePaths && image.filePaths.length > 0) {
-            const archiver = require('archiver');
-            const zipName = `${image.name}.zip`;
-            
-            // 设置响应头
-            res.header('Content-Type', 'application/zip');
-            res.header('Content-Disposition', `attachment; filename=${zipName}`);
-            
-            // 创建 archiver 实例
-            const archive = archiver('zip', {
-                zlib: { level: 9 }
-            });
-            
-            // 管道到响应
-            archive.pipe(res);
-            
-            // 添加所有文件
-            for (let i = 0; i < image.filePaths.length; i++) {
-                const filePath = image.filePaths[i];
-                const originalName = image.originalNames[i] || `file${i}${path.extname(filePath)}`;
-                if (fs.existsSync(filePath)) {
-                    archive.file(filePath, { name: originalName });
-                }
-            }
-            
-            // 完成打包
-            archive.finalize();
-        } else {
-            // 对于 GeoTIFF，直接下载
-            const fileName = image.originalName || path.basename(image.filePath);
-            res.header('Content-Type', 'application/octet-stream');
-            res.header('Content-Disposition', `attachment; filename=${fileName}`);
-            res.sendFile(image.filePath);
-        }
+        // 在 Vercel 上，文件不会保存到本地，所以无法提供下载
+        res.status(404).json({ error: '文件下载功能在 Vercel 部署环境中不可用' });
     } catch (error) {
         console.error('下载失败:', error);
         res.status(500).json({ error: '下载失败: ' + error.message });
