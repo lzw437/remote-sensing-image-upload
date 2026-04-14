@@ -52,10 +52,9 @@ app.use((req, res, next) => {
 
 // 检查数据库连接状态的中间件
 app.use((req, res, next) => {
-    // 允许登录注册接口在数据库未连接时也能访问
-    if (mongoose.connection.readyState !== 1 && req.path.startsWith('/api') && !req.path.startsWith('/api/login') && !req.path.startsWith('/api/register')) {
-        console.error('数据库未连接，当前状态:', mongoose.connection.readyState);
-        return res.status(503).json({ message: '数据库正在连接中，请稍后再试。当前状态: ' + mongoose.connection.readyState });
+    // 允许所有接口在数据库未连接时也能访问，让mongoose自动重试连接
+    if (mongoose.connection.readyState !== 1 && req.path.startsWith('/api')) {
+        console.warn('数据库未连接，当前状态:', mongoose.connection.readyState, '，请求将继续执行');
     }
     next();
 });
