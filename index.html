@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>遥感影像共享站</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html { height: 100%; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100%; }
+        .sidebar {
+            position: absolute; top: 0; left: 0; width: 320px; height: 100%;
+            background: white; z-index: 1100; box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column;
+        }
+        .sidebar-header { padding: 20px; background: #f8f9fa; border-bottom: 1px solid #eee; }
+        .sidebar-header h2 { margin: 0; font-size: 1.4rem; color: #333; }
+        .sidebar-content { flex: 1; padding: 20px; overflow-y: auto; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem; color: #555; }
+        .form-control { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        
+        .upload-btn-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; margin-top: 10px; }
+        .upload-btn-wrapper input[type=file] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+        .btn { border: 2px solid #007bff; color: #007bff; background: white; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; }
+        .btn:hover { background: #007bff; color: white; }
+        
+        .layer-list { list-style: none; padding: 0; margin-top: 10px; }
+        .layer-item { padding: 10px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 8px; font-size: 0.85rem; border-left: 4px solid #ddd; }
+        .layer-item.pending { border-left-color: #ffc107; }
+        .layer-item.saved { border-left-color: #28a745; }
+        .layer-name { font-weight: bold; display: block; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .layer-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+        .action-btn { padding: 3px 8px; font-size: 0.7rem; cursor: pointer; border-radius: 3px; border: 1px solid #ddd; background: #fff; }
+        .btn-save-dl { color: #28a745; border-color: #28a745; }
+        .btn-dl { color: #17a2b8; border-color: #17a2b8; }
+        .btn-zoom { color: #007bff; border-color: #007bff; }
+        .btn-show { color: #fd7e14; border-color: #fd7e14; }
+        .btn-del { color: #dc3545; border-color: #dc3545; }
+
+        .loading-hint { display: none; color: #007bff; font-size: 14px; margin-top: 10px; text-align: center; padding: 10px; background: rgba(255,255,255,0.95); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .progress-bar { width: 100%; height: 10px; background-color: #e9ecef; border-radius: 5px; margin: 8px 0; overflow: hidden; border: 1px solid #dee2e6; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #007bff, #0056b3); width: 0%; transition: width 0.3s ease; border-radius: 5px; }
+        .progress-text { font-weight: bold; margin-bottom: 5px; }
+        #coords { position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 4px; font-family: monospace; font-size: 12px; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .auth-btn { padding: 6px 12px; border: 1px solid #007bff; border-radius: 4px; background: white; color: #007bff; cursor: pointer; font-size: 0.8rem; }
+        .auth-btn:hover { background: #007bff; color: white; }
+        .user-info { padding: 6px 12px; background: #28a745; color: white; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 8px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; width: 400px; max-width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .modal-content h2 { margin-top: 0; color: #333; }
+        .modal-content .form-group { margin-bottom: 15px; }
+        .modal-content .form-control { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .modal-content .btn { margin-top: 10px; }
+        .modal-content .error { color: red; margin-top: 10px; font-size: 0.9rem; }
+        .modal-content .link { margin-top: 15px; font-size: 0.9rem; text-align: center; }
+        .modal-content .link a { color: #007bff; text-decoration: none; }
+        .modal-content .link a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="sidebar">
+        <div class="sidebar-header" style="display: flex; align-items: center; justify-content: space-between; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: 2px solid #5664d2;">
+            <h2 style="margin: 0; font-size: 1.2rem; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">遥感工作站</h2>
+            <div id="auth-container" class="auth-container" style="display: flex; gap: 8px;">
+                <button class="auth-btn" id="login-btn" onclick="showLoginModal()" style="padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease;">
+                    登录
+                </button>
+                <button class="auth-btn" id="register-btn" onclick="showRegisterModal()" style="padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease;">
+                    注册
+                </button>
+            </div>
+            <div id="notification" style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 8px; text-align: center; min-height: 18px; position: absolute; top: 55px; left: 0; right: 0;"></div>
+        </div>
+        <div class="sidebar-content">
+            <div class="form-group">
+                <label>选择底图</label>
+                <select id="basemap-select" class="form-control">
+                    <option value="gaode">高德标准地图</option>
+                    <option value="gaodeImg">高德卫星影像</option>
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="googleEarth">Google Earth</option>
+                    <option value="none">无底图</option>
+                </select>
+            </div>
+            
+            <!-- 测量工具下拉列表 -->
+            <div style="margin-top: 15px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="dropdown-header" onclick="toggleDropdown('measure-dropdown')" style="padding: 10px; background-color: #f8f9fa; cursor: pointer; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                    <label style="margin: 0; font-weight: 500;">测量工具</label>
+                    <span id="measure-dropdown-icon" style="font-size: 12px;">▼</span>
+                </div>
+                <div id="measure-dropdown" class="dropdown-content" style="padding: 10px; border-top: 1px solid #ddd; display: block;">
+                    <div class="btn-group" style="width: 100%; margin-top: 5px;">
+                        <button id="measure-distance" class="btn btn-sm" style="width: 50%; border-radius: 4px 0 0 4px;">测量距离</button>
+                        <button id="measure-area" class="btn btn-sm" style="width: 50%; border-radius: 0 4px 4px 0;">测量面积</button>
+                    </div>
+                    <button id="measure-clear" class="btn btn-sm" style="width: 100%; margin-top: 5px;">清除测量</button>
+                    <div id="measure-result" style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px; text-align: center;">测量结果将显示在这里</div>
+                </div>
+            </div>
+            
+            <!-- 多边形管理下拉列表 -->
+            <div style="margin-top: 15px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="dropdown-header" onclick="toggleDropdown('polygon-dropdown')" style="padding: 10px; background-color: #f8f9fa; cursor: pointer; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                    <label style="margin: 0; font-weight: 500;">多边形管理</label>
+                    <span id="polygon-dropdown-icon" style="font-size: 12px;">▼</span>
+                </div>
+                <div id="polygon-dropdown" class="dropdown-content" style="padding: 10px; border-top: 1px solid #ddd; display: block;">
+                    <!-- 多边形绘制部分 -->
+                    <div style="margin-bottom: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">多边形绘制</h5>
+                        <button id="draw-polygon" class="btn btn-sm" style="width: 100%; margin-bottom: 5px;">绘制多边形</button>
+                        <button id="stop-draw" class="btn btn-sm" style="width: 100%; margin-bottom: 5px; display: none;">停止绘制</button>
+                        <div style="margin-top: 10px;">
+                            <label>多边形名称</label>
+                            <input type="text" id="polygon-name" placeholder="输入多边形名称" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label>多边形类别</label>
+                            <select id="polygon-class" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                                <option value="building">建筑物</option>
+                                <option value="road">道路</option>
+                                <option value="green">绿地</option>
+                                <option value="water">水域</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <button id="save-polygon" class="btn btn-sm" style="width: 100%; margin-top: 10px; background: #28a745; color: white;">保存多边形</button>
+                    </div>
+                    
+                    <!-- 分割线 -->
+                    <div style="border-top: 1px solid #e0e0e0; margin: 15px 0;"></div>
+                    
+                    <!-- 多边形列表部分 -->
+                    <div>
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">多边形列表</h5>
+                        <div style="margin-top: 10px;">
+                            <label>按类别筛选</label>
+                            <select id="polygon-filter" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; margin-top: 5px;">
+                                <option value="all">全部</option>
+                                <option value="building">建筑物</option>
+                                <option value="road">道路</option>
+                                <option value="green">绿地</option>
+                                <option value="water">水域</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <div style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                            <div id="polygon-list" style="border: 1px solid #ddd; border-radius: 4px; padding: 5px;">
+                                暂无多边形
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 影像管理下拉列表 -->
+            <div style="margin-top: 15px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="dropdown-header" onclick="toggleDropdown('upload-dropdown')" style="padding: 10px; background-color: #f8f9fa; cursor: pointer; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                    <label style="margin: 0; font-weight: 500;">影像管理</label>
+                    <span id="upload-dropdown-icon" style="font-size: 12px;">▼</span>
+                </div>
+                <div id="upload-dropdown" class="dropdown-content" style="padding: 10px; border-top: 1px solid #ddd; display: block;">
+                    <!-- 上传新影像部分 -->
+                    <div style="margin-bottom: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">上传新影像</h5>
+                        <input type="text" id="layer-name-input" class="form-control" placeholder="输入显示名称..." />
+                        <div class="upload-btn-wrapper">
+                            <button class="btn">选择并预览影像</button>
+                            <input type="file" id="upload-tif" accept=".tif,.tiff,.shp,.shx,.dbf,.prj,.cpg,.qpj,.dat,.hdr" multiple />
+                        </div>
+                        <div id="loading-hint" class="loading-hint">
+                            <div class="progress-text">正在处理...</div>
+                            <div class="progress-bar">
+                                <div id="progress-fill" class="progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 分割线 -->
+                    <div style="border-top: 1px solid #e0e0e0; margin: 15px 0;"></div>
+                    
+                    <!-- 预览列表部分 -->
+                    <div style="margin-bottom: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">预览列表</h5>
+                        <div style="font-size: 0.8rem; color: #888; font-weight: bold; margin-bottom: 5px;">(点击下载并同步)</div>
+                        <ul id="pending-list" class="layer-list"></ul>
+                    </div>
+                    
+                    <!-- 分割线 -->
+                    <div style="border-top: 1px solid #e0e0e0; margin: 15px 0;"></div>
+                    
+                    <!-- 影像库部分 -->
+                    <div>
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">影像库 (云端同步)</h5>
+                        <input type="text" id="search-input" class="form-control" style="margin-bottom: 10px;" placeholder="搜索云端影像..." />
+                        <ul id="db-layer-list" class="layer-list"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="coords">经度: 0.0000, 纬度: 0.0000</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/proj4"></script>
+    <script src="https://unpkg.com/georaster"></script>
+    <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
+    <script>
+        const API_URL = '/api/images';
+        
+        // 下拉列表切换函数
+        function toggleDropdown(id) {
+            const content = document.getElementById(id);
+            const icon = document.getElementById(id + '-icon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                if (icon) icon.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                if (icon) icon.textContent = '▶';
+            }
+        }
+        
+        // 显示通知函数
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            
+            // 设置不同类型的样式
+            if (type === 'success') {
+                notification.style.color = '#28a745';
+            } else if (type === 'error') {
+                notification.style.color = '#dc3545';
+            } else if (type === 'warning') {
+                notification.style.color = '#ffc107';
+            } else {
+                notification.style.color = '#666';
+            }
+            
+            // 3秒后自动清除
+            setTimeout(() => {
+                notification.textContent = '';
+            }, 3000);
+        }
+        
+        // 页面加载时关闭所有下拉列表
+        window.addEventListener('load', function() {
+            // 关闭所有下拉列表
+            const dropdowns = ['measure-dropdown', 'polygon-dropdown', 'upload-dropdown'];
+            dropdowns.forEach(id => {
+                const content = document.getElementById(id);
+                const icon = document.getElementById(id + '-icon');
+                if (content) {
+                    content.style.display = 'none';
+                }
+                if (icon) {
+                    icon.textContent = '▶';
+                }
+            });
+        });
+        
+        var map = L.map('map', { 
+            zoomControl: false,
+            maxZoom: 18,
+            minZoom: 3
+        }).setView([39.9042, 116.4074], 10);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // 防止侧边栏点击穿透
+        const sidebar = document.querySelector('.sidebar');
+        L.DomEvent.disableClickPropagation(sidebar);
+        L.DomEvent.disableScrollPropagation(sidebar);
+
+        // 底图配置
+        const gaodeOptions = { subdomains: '1234', zIndex: 0, maxZoom: 18 };
+        const osmOptions = { subdomains: 'abc', zIndex: 0, maxZoom: 18 };
+        const basemaps = {
+            gaode: L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', gaodeOptions),
+            gaodeImg: L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', gaodeOptions),
+            osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', osmOptions),
+            googleEarth: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { zIndex: 0, maxZoom: 18 }),
+            none: L.layerGroup()
+        };
+        var currentBasemap = basemaps.gaode.addTo(map);
+        document.getElementById('basemap-select').onchange = (e) => {
+            map.removeLayer(currentBasemap);
+            currentBasemap = basemaps[e.target.value].addTo(map);
+        };
+
+        // 坐标显示
+        map.on('mousemove', (e) => {
+            document.getElementById('coords').innerHTML = `经度: ${e.latlng.lng.toFixed(4)}, 纬度: ${e.latlng.lat.toFixed(4)}`;
+        });
+
+        // 测量工具
+        let measureMode = null; // 'distance' 或 'area'
+        let measureLayer = L.layerGroup().addTo(map);
+        let measurePoints = [];
+        let measureLine = null;
+        let measurePolygon = null;
+        
+        // 测量结果显示
+        const measureResult = document.getElementById('measure-result');
+        
+        // 清除测量
+        function clearMeasurement() {
+            measureLayer.clearLayers();
+            measurePoints = [];
+            measureLine = null;
+            measurePolygon = null;
+            measureMode = null;
+            measureResult.textContent = '测量结果将显示在这里';
+            document.getElementById('measure-distance').style.backgroundColor = '';
+            document.getElementById('measure-area').style.backgroundColor = '';
+            document.getElementById('measure-distance').style.color = '';
+            document.getElementById('measure-area').style.color = '';
+        }
+        
+        // 计算两点之间的距离
+        function calculateDistance(point1, point2) {
+            return point1.distanceTo(point2);
+        }
+        
+        // 计算多边形面积（使用球面面积公式）
+        function calculateArea(points) {
+            if (points.length < 3) return 0;
+            
+            // 使用球面多边形面积公式（Haversine公式）
+            let area = 0;
+            const R = 6371000; // 地球半径（米）
+            
+            for (let i = 0; i < points.length; i++) {
+                const p1 = points[i];
+                const p2 = points[(i + 1) % points.length];
+                
+                const lat1 = p1.lat * Math.PI / 180;
+                const lat2 = p2.lat * Math.PI / 180;
+                const lng1 = p1.lng * Math.PI / 180;
+                const lng2 = p2.lng * Math.PI / 180;
+                
+                // 球面多边形面积公式
+                area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+            }
+            
+            area = Math.abs(area) * R * R / 2;
+            return area;
+        }
+        
+        // 格式化距离
+        function formatDistance(distance) {
+            if (distance < 1000) {
+                return distance.toFixed(2) + ' 米';
+            } else {
+                return (distance / 1000).toFixed(2) + ' 公里';
+            }
+        }
+        
+        // 格式化面积
+        function formatArea(area) {
+            if (area < 1000000) {
+                return area.toFixed(2) + ' 平方米';
+            } else {
+                return (area / 1000000).toFixed(2) + ' 平方公里';
+            }
+        }
+        
+        // 测量距离
+        document.getElementById('measure-distance').addEventListener('click', () => {
+            clearMeasurement();
+            measureMode = 'distance';
+            document.getElementById('measure-distance').style.backgroundColor = '#007bff';
+            document.getElementById('measure-distance').style.color = 'white';
+            measureResult.textContent = '点击地图开始测量距离，双击结束';
+        });
+        
+        // 测量面积
+        document.getElementById('measure-area').addEventListener('click', () => {
+            clearMeasurement();
+            measureMode = 'area';
+            document.getElementById('measure-area').style.backgroundColor = '#007bff';
+            document.getElementById('measure-area').style.color = 'white';
+            measureResult.textContent = '点击地图添加点，实时显示面积';
+        });
+        
+        // 清除测量
+        document.getElementById('measure-clear').addEventListener('click', clearMeasurement);
+        
+        // 临时拖动点
+        let tempPoint = null;
+        let tempPolygon = null;
+        
+        // 地图点击事件
+        map.on('click', (e) => {
+            if (!measureMode) return;
+            
+            const point = e.latlng;
+            
+            if (measureMode === 'distance') {
+                // 距离测量逻辑保持不变
+                measurePoints.push(point);
+                
+                // 添加标记
+                L.circleMarker(point, {
+                    radius: 5,
+                    color: '#007bff',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.5
+                }).addTo(measureLayer);
+                
+                // 更新距离测量
+                if (measurePoints.length >= 2) {
+                    if (measureLine) {
+                        measureLayer.removeLayer(measureLine);
+                    }
+                    
+                    measureLine = L.polyline(measurePoints, {
+                        color: '#007bff',
+                        weight: 2,
+                        dashArray: '5, 5'
+                    }).addTo(measureLayer);
+                    
+                    // 计算总距离
+                    let totalDistance = 0;
+                    for (let i = 1; i < measurePoints.length; i++) {
+                        totalDistance += calculateDistance(measurePoints[i-1], measurePoints[i]);
+                    }
+                    
+                    measureResult.textContent = `距离: ${formatDistance(totalDistance)}`;
+                }
+            } else if (measureMode === 'area') {
+                // 面积测量 - 支持添加多个点，实时显示
+                measurePoints.push(point);
+                
+                // 添加标记
+                L.circleMarker(point, {
+                    radius: 5,
+                    color: '#007bff',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.5
+                }).addTo(measureLayer);
+                
+                // 移除之前的临时多边形
+                if (tempPolygon) {
+                    measureLayer.removeLayer(tempPolygon);
+                    tempPolygon = null;
+                }
+                
+                // 如果有足够的点，创建多边形并显示面积
+                if (measurePoints.length >= 3) {
+                    // 移除之前的多边形
+                    if (measurePolygon) {
+                        measureLayer.removeLayer(measurePolygon);
+                    }
+                    
+                    // 创建新的多边形
+                    measurePolygon = L.polygon(measurePoints, {
+                        color: '#007bff',
+                        fillColor: '#007bff',
+                        fillOpacity: 0.2
+                    }).addTo(measureLayer);
+                    
+                    // 计算并显示面积
+                    const area = calculateArea(measurePoints);
+                    measureResult.textContent = `面积: ${formatArea(area)}`;
+                } else if (measurePoints.length === 1) {
+                    measureResult.textContent = '点击添加更多点来测量面积';
+                } else if (measurePoints.length === 2) {
+                    measureResult.textContent = '点击添加第三个点';
+                }
+            }
+        });
+        
+        // 双击结束距离测量
+        map.on('dblclick', (e) => {
+            // 如果在绘制多边形模式，不处理距离测量的双击事件
+            if (drawMode) return;
+            
+            if (measureMode === 'distance') {
+                measureResult.textContent += ' (测量完成)';
+                measureMode = null;
+                document.getElementById('measure-distance').style.backgroundColor = '';
+                document.getElementById('measure-distance').style.color = '';
+            }
+        });
+        
+        // 清除测量时清理临时对象
+        const originalClearMeasurement = clearMeasurement;
+        clearMeasurement = () => {
+            if (tempPolygon) {
+                measureLayer.removeLayer(tempPolygon);
+                tempPolygon = null;
+            }
+            originalClearMeasurement();
+        };
+
+        // 多边形绘制功能
+        let drawMode = false;
+        let currentPolygon = null;
+        let currentPolygonPoints = [];
+        let polygons = [];
+        let polygonLayer = L.layerGroup().addTo(map);
+        
+        // 绘制多边形
+        document.getElementById('draw-polygon').addEventListener('click', () => {
+            drawMode = true;
+            document.getElementById('draw-polygon').style.display = 'none';
+            document.getElementById('stop-draw').style.display = 'block';
+            showNotification('开始绘制多边形：点击添加点，双击结束');
+        });
+        
+        // 停止绘制
+        document.getElementById('stop-draw').addEventListener('click', () => {
+            drawMode = false;
+            document.getElementById('draw-polygon').style.display = 'block';
+            document.getElementById('stop-draw').style.display = 'none';
+            
+            // 清理当前多边形
+            if (currentPolygon) {
+                polygonLayer.removeLayer(currentPolygon);
+                currentPolygon = null;
+            }
+            currentPolygonPoints = [];
+        });
+        
+        // 地图点击事件 - 绘制多边形
+        map.on('click', (e) => {
+            if (!drawMode) return;
+            
+            const point = e.latlng;
+            currentPolygonPoints.push(point);
+            
+            // 获取当前选择的类别
+            const polygonClass = document.getElementById('polygon-class').value;
+            const colorConfig = classColors[polygonClass] || classColors.other;
+            
+            // 添加标记（使用类别颜色）
+            L.circleMarker(point, {
+                radius: 5,
+                color: colorConfig.color,
+                fillColor: colorConfig.color,
+                fillOpacity: 0.5
+            }).addTo(polygonLayer);
+            
+            // 更新多边形
+            if (currentPolygon) {
+                polygonLayer.removeLayer(currentPolygon);
+            }
+            
+            if (currentPolygonPoints.length >= 2) {
+                currentPolygon = L.polyline(currentPolygonPoints, {
+                    color: colorConfig.color,
+                    weight: 2
+                }).addTo(polygonLayer);
+            }
+        });
+        
+        // 双击结束绘制
+        map.on('dblclick', () => {
+            if (drawMode && currentPolygonPoints.length >= 3) {
+                // 完成多边形
+                if (currentPolygon) {
+                    polygonLayer.removeLayer(currentPolygon);
+                }
+                
+                // 获取当前选择的类别
+                const polygonClass = document.getElementById('polygon-class').value;
+                const colorConfig = classColors[polygonClass] || classColors.other;
+                
+                currentPolygon = L.polygon(currentPolygonPoints, colorConfig).addTo(polygonLayer);
+                
+                showNotification('多边形绘制完成，点击保存多边形');
+            }
+        });
+        
+        // 保存多边形
+        document.getElementById('save-polygon').addEventListener('click', () => {
+            if (!currentPolygon || currentPolygonPoints.length < 3) {
+                showNotification('请先绘制一个多边形', 'warning');
+                return;
+            }
+            
+            const name = document.getElementById('polygon-name').value || '未命名多边形';
+            const polygonClass = document.getElementById('polygon-class').value;
+            
+            // 获取当前用户信息
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            
+            // 显示加载提示
+            showNotification('正在保存多边形到数据库...');
+            
+            // 发送到服务器
+            fetch('/api/polygons', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: name,
+                    class: polygonClass,
+                    points: currentPolygonPoints,
+                    userId: user ? user.userId : null,
+                    username: user ? user.username : '匿名'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification('保存失败: ' + data.error, 'error');
+                } else {
+                    // 创建多边形对象
+                    const polygon = {
+                        id: data.polygon._id,
+                        name: data.polygon.name,
+                        class: data.polygon.class,
+                        points: data.polygon.points,
+                        layer: currentPolygon,
+                        userId: data.polygon.userId // 保存用户ID
+                    };
+                    
+                    polygons.push(polygon);
+                    
+                    // 清理当前多边形
+                    currentPolygon = null;
+                    currentPolygonPoints = [];
+                    drawMode = false;
+                    document.getElementById('draw-polygon').style.display = 'block';
+                    document.getElementById('stop-draw').style.display = 'none';
+                    
+                    // 清空输入
+                    document.getElementById('polygon-name').value = '';
+                    
+                    // 更新多边形列表
+                    updatePolygonList();
+                    
+                    showNotification('多边形保存成功', 'success');
+                }
+            })
+            .catch(error => {
+                console.error('保存多边形失败:', error);
+                showNotification('保存失败: 网络错误', 'error');
+            });
+        });
+        
+        // 更新多边形列表
+        function updatePolygonList() {
+            const polygonList = document.getElementById('polygon-list');
+            const filter = document.getElementById('polygon-filter').value;
+            
+            // 筛选多边形
+            const filteredPolygons = filter === 'all' ? polygons : polygons.filter(p => p.class === filter);
+            
+            if (filteredPolygons.length === 0) {
+                polygonList.innerHTML = '暂无多边形';
+                return;
+            }
+            
+            polygonList.innerHTML = '';
+            filteredPolygons.forEach(polygon => {
+                const item = document.createElement('div');
+                item.style.padding = '5px';
+                item.style.borderBottom = '1px solid #eee';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                item.style.cursor = 'pointer';
+                item.style.backgroundColor = '#f8f9fa';
+                item.style.borderRadius = '3px';
+                item.style.transition = 'background-color 0.2s';
+                
+                item.onmouseover = () => {
+                    item.style.backgroundColor = '#e9ecef';
+                };
+                
+                item.onmouseout = () => {
+                    item.style.backgroundColor = '#f8f9fa';
+                };
+                
+                // 点击定位到多边形
+                item.onclick = (e) => {
+                    if (e.target.tagName === 'BUTTON') return; // 避免删除按钮触发
+                    
+                    // 计算多边形中心点
+                    const bounds = polygon.layer.getBounds();
+                    const center = bounds.getCenter();
+                    
+                    // 定位到多边形
+                    map.setView(center, 15);
+                    
+                    // 高亮显示多边形
+                    if (polygon.layer) {
+                        // 保存原始样式
+                        const originalStyle = polygon.layer.options;
+                        
+                        // 高亮样式
+                        polygon.layer.setStyle({
+                            color: '#ff0000',
+                            weight: 3,
+                            fillColor: '#ff0000',
+                            fillOpacity: 0.3
+                        });
+                        
+                        // 3秒后恢复原始样式
+                        setTimeout(() => {
+                            polygon.layer.setStyle(originalStyle);
+                        }, 3000);
+                    }
+                };
+                
+                const info = document.createElement('div');
+                info.innerHTML = `<strong>${polygon.name}</strong><br><small>类别: ${getClassName(polygon.class)}</small>`;
+                
+                // 检查是否显示删除按钮（只有当前用户上传的多边形才能删除）
+                const user = JSON.parse(localStorage.getItem('currentUser'));
+                const canDelete = user && polygon.userId && polygon.userId.toString() === user.userId;
+                
+                if (canDelete) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '删除';
+                    deleteBtn.style.fontSize = '10px';
+                    deleteBtn.style.padding = '2px 5px';
+                    deleteBtn.style.backgroundColor = '#dc3545';
+                    deleteBtn.style.color = 'white';
+                    deleteBtn.style.border = 'none';
+                    deleteBtn.style.borderRadius = '2px';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation(); // 阻止事件冒泡
+                        deletePolygon(polygon.id);
+                    };
+                    
+                    item.appendChild(info);
+                    item.appendChild(deleteBtn);
+                } else {
+                    item.appendChild(info);
+                }
+                polygonList.appendChild(item);
+            });
+        }
+        
+        // 获取类别名称
+        function getClassName(classValue) {
+            const classMap = {
+                'building': '建筑物',
+                'road': '道路',
+                'green': '绿地',
+                'water': '水域',
+                'other': '其他'
+            };
+            return classMap[classValue] || classValue;
+        }
+        
+        // 删除多边形
+        function deletePolygon(id) {
+            if (confirm('确定要删除这个多边形吗？')) {
+                // 获取当前用户信息
+                const user = JSON.parse(localStorage.getItem('currentUser'));
+                
+                if (!user) {
+                    alert('请先登录');
+                    return;
+                }
+                
+                // 发送到服务器
+                fetch(`/api/polygons/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: user.userId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('删除失败: ' + data.error);
+                    } else {
+                        const index = polygons.findIndex(p => p.id === id);
+                        if (index !== -1) {
+                            const polygon = polygons[index];
+                            polygonLayer.removeLayer(polygon.layer);
+                            polygons.splice(index, 1);
+                            updatePolygonList();
+                            alert('多边形已删除');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('删除多边形失败:', error);
+                    alert('删除失败: 网络错误');
+                });
+            }
+        }
+        
+        // 类别颜色映射
+        const classColors = {
+            'building': { color: '#ff6384', fillColor: '#ff6384', fillOpacity: 0.3 }, // 建筑物 - 红色
+            'road': { color: '#36a2eb', fillColor: '#36a2eb', fillOpacity: 0.3 }, // 道路 - 蓝色
+            'green': { color: '#4bc0c0', fillColor: '#4bc0c0', fillOpacity: 0.3 }, // 绿地 - 青色
+            'water': { color: '#9966ff', fillColor: '#9966ff', fillOpacity: 0.3 }, // 水域 - 紫色
+            'other': { color: '#ffcd56', fillColor: '#ffcd56', fillOpacity: 0.3 } // 其他 - 黄色
+        };
+
+        // 按类别筛选
+        document.getElementById('polygon-filter').addEventListener('change', updatePolygonList);
+
+        // 从服务器加载多边形列表
+        function loadPolygons() {
+            fetch('/api/polygons')
+                .then(response => response.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        // 清空当前多边形
+                        polygons.forEach(polygon => {
+                            if (polygon.layer) {
+                                polygonLayer.removeLayer(polygon.layer);
+                            }
+                        });
+                        polygons = [];
+
+                        // 添加从服务器加载的多边形
+                        data.forEach(polygonData => {
+                            // 获取类别对应的颜色
+                            const colorConfig = classColors[polygonData.class] || classColors.other;
+                            
+                            // 创建多边形图层
+                            const layer = L.polygon(polygonData.points, colorConfig).addTo(polygonLayer);
+
+                            // 添加到多边形数组
+                            polygons.push({
+                                id: polygonData._id,
+                                name: polygonData.name,
+                                class: polygonData.class,
+                                points: polygonData.points,
+                                layer: layer,
+                                userId: polygonData.userId // 保存用户ID
+                            });
+                        });
+
+                        // 更新多边形列表
+                        updatePolygonList();
+                    }
+                })
+                .catch(error => {
+                    console.error('加载多边形失败:', error);
+                });
+        }
+
+        // 页面加载时加载多边形
+        window.addEventListener('load', loadPolygons);
+
+        // 数据存储
+        var pendingLayers = [];
+        var dbLayers = [];
+        var loadedCloudLayers = {}; // 存储已加载到地图的云端图层对象
+
+        // 1. 获取云端列表
+        async function fetchDB() {
+            try {
+                console.log('正在请求云端数据...', API_URL);
+                const res = await fetch(API_URL);
+                if (!res.ok) throw new Error(`HTTP 错误: ${res.status}`);
+                dbLayers = await res.json();
+                console.log('获取到云端数据:', dbLayers);
+                renderDB();
+            } catch (e) { 
+                console.error('获取列表失败:', e);
+                const list = document.getElementById('db-layer-list');
+                list.innerHTML = `<li style="color:red;font-size:12px;">加载失败: ${e.message}</li>`;
+            }
+        }
+
+        // 2. 渲染云端列表
+        function renderDB(filter = '') {
+            const list = document.getElementById('db-layer-list');
+            list.innerHTML = '';
+            dbLayers.filter(i => i.name.toLowerCase().includes(filter.toLowerCase())).forEach(i => {
+                const isLoaded = !!loadedCloudLayers[i._id];
+                const li = document.createElement('li');
+                li.className = 'layer-item saved';
+                
+                // 检查用户是否有权限删除
+                const canDelete = currentUser && i.userId && i.userId.toString() === currentUser.userId;
+                const deleteButton = canDelete ? `<button class="action-btn btn-del" onclick="deleteDB('${i._id}')">删除</button>` : '';
+                
+                li.innerHTML = `
+                    <span class="layer-name">${i.name}</span>
+                    <small>上传者: ${i.username || '未知'}</small><br>
+                    <small>类型: ${i.fileType || '未知'}</small>
+                    <div class="layer-actions">
+                        <button class="action-btn btn-zoom" onclick="zoomDB('${i._id}')">定位</button>
+                        <button class="action-btn btn-show" onclick="toggleCloudLayer('${i._id}')">${isLoaded ? '关闭' : '显示'}</button>
+                        <button class="action-btn btn-dl" onclick="downloadCloudFile('${i._id}')">下载</button>
+                        ${deleteButton}
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // 3. 渲染预览列表
+        function renderPending() {
+            const list = document.getElementById('pending-list');
+            list.innerHTML = '';
+            pendingLayers.forEach(i => {
+                const li = document.createElement('li');
+                li.className = 'layer-item pending';
+                li.innerHTML = `
+                    <span class="layer-name">${i.name}</span>
+                    <div class="layer-actions">
+                        <button class="action-btn btn-save" onclick="saveToDatabase('${i.id}')">保存到数据库</button>
+                        <button class="action-btn btn-download" onclick="downloadFileLocally('${i.id}')">下载</button>
+                        <button class="action-btn btn-zoom" onclick="zoomPending('${i.id}')">定位</button>
+                        <button class="action-btn btn-del" onclick="removePending('${i.id}')">移除</button>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // 4. 选择文件并预览
+        document.getElementById('upload-tif').onchange = async (e) => {
+            const files = Array.from(e.target.files);
+            const name = document.getElementById('layer-name-input').value.trim();
+            if (files.length === 0) return;
+            if (!name) {
+                alert('请输入显示名称后再选择文件！');
+                e.target.value = '';
+                return;
+            }
+
+            const loadingHint = document.getElementById('loading-hint');
+            const progressText = loadingHint.querySelector('.progress-text');
+            const progressFill = document.getElementById('progress-fill');
+            
+            loadingHint.style.display = 'block';
+            progressText.innerText = '正在读取文件... 0%';
+            progressFill.style.width = '0%';
+
+            try {
+                // 检查是否包含 shapefile 文件
+                const hasShapefile = files.some(file => file.name.toLowerCase().endsWith('.shp'));
+                // 检查是否包含 dat 文件
+                const hasDatFile = files.some(file => file.name.toLowerCase().endsWith('.dat'));
+                
+                if (hasShapefile) {
+                    // 处理 shapefile 文件
+                    const shpFile = files.find(file => file.name.toLowerCase().endsWith('.shp'));
+                    if (shpFile) {
+                        // 显示进度条
+                        progressText.innerText = '正在处理 Shapefile 文件...';
+                        progressFill.style.width = '50%';
+                        
+                        // 创建一个临时图层
+                        const layer = L.layerGroup().addTo(map);
+                        pendingLayers.push({ id: Date.now(), name, layer, files, type: 'shapefile' });
+                        renderPending();
+                        document.getElementById('layer-name-input').value = '';
+                        setTimeout(() => map.invalidateSize(), 500);
+                        
+                        // 完成
+                        progressFill.style.width = '100%';
+                        setTimeout(() => {
+                            loadingHint.style.display = 'none';
+                            progressFill.style.width = '0%';
+                            showNotification('Shapefile 预览功能正在开发中，文件已添加到上传列表，请点击保存到数据库以上传所有相关文件');
+                        }, 500);
+                    }
+                } else if (hasDatFile) {
+                    // 处理 dat 文件
+                    // 显示进度条
+                    progressText.innerText = '正在处理 DAT 文件...';
+                    progressFill.style.width = '50%';
+                    
+                    // 创建一个临时图层
+                    const layer = L.layerGroup().addTo(map);
+                    pendingLayers.push({ id: Date.now(), name, layer, files, type: 'dat' });
+                    renderPending();
+                    document.getElementById('layer-name-input').value = '';
+                    setTimeout(() => map.invalidateSize(), 500);
+                    
+                    // 完成
+                    progressFill.style.width = '100%';
+                    setTimeout(() => {
+                        loadingHint.style.display = 'none';
+                        progressFill.style.width = '0%';
+                        showNotification('DAT 文件已添加到上传列表，请点击保存到数据库以上传所有相关文件');
+                    }, 500);
+                } else {
+                    // 处理 GeoTIFF 文件
+                    const tifFile = files[0];
+                    const reader = new FileReader();
+                    
+                    // 监听读取进度
+                    reader.onprogress = (event) => {
+                        if (event.lengthComputable) {
+                            const percentComplete = Math.round((event.loaded / event.total) * 100);
+                            progressText.innerText = `正在读取文件... ${percentComplete}%`;
+                            progressFill.style.width = `${percentComplete}%`;
+                        }
+                    };
+                    
+                    reader.onload = async (ev) => {
+                        try {
+                            progressText.innerText = '正在解析影像...';
+                            progressFill.style.width = '100%';
+                            
+                            const georaster = await parseGeoraster(ev.target.result);
+                            const layer = new GeoRasterLayer({ georaster, opacity: 0.7, resolution: 256, zIndex: 10 }).addTo(map);
+                            map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+                            pendingLayers.push({ id: Date.now(), name, layer, file: tifFile, type: 'geotiff' });
+                            renderPending();
+                            document.getElementById('layer-name-input').value = '';
+                            setTimeout(() => map.invalidateSize(), 500);
+                        } catch (err) { 
+                            console.error(err);
+                            showNotification('影像解析失败，请确保是标准的 GeoTIFF 文件', 'error');
+                        } finally {
+                            loadingHint.style.display = 'none';
+                            progressFill.style.width = '0%';
+                        }
+                    };
+                    
+                    reader.onerror = () => {
+                        showNotification('文件读取失败', 'error');
+                        loadingHint.style.display = 'none';
+                        progressFill.style.width = '0%';
+                    };
+                    
+                    reader.readAsArrayBuffer(tifFile);
+                    return; // 异步操作，不执行下面的 finally
+                }
+            } catch (err) {
+                console.error(err);
+                showNotification('文件处理失败: ' + err.message, 'error');
+                loadingHint.style.display = 'none';
+                progressFill.style.width = '0%';
+            }
+        };
+
+        // 5. 下载并同步（带进度显示）
+        window.saveAndDownload = (id) => {
+            const idx = pendingLayers.findIndex(l => l.id == id);
+            const item = pendingLayers[idx];
+            const loadingHint = document.getElementById('loading-hint');
+            const progressText = loadingHint.querySelector('.progress-text');
+            const progressFill = document.getElementById('progress-fill');
+            
+            loadingHint.style.display = 'block';
+            progressText.innerText = '正在上传文件... 0%';
+            progressFill.style.width = '0%';
+
+            const fd = new FormData();
+            fd.append('name', item.name);
+            
+            // 将 bounds 转换为简单的数组格式，避免 Leaflet 对象的复杂性
+            let boundsArray = [];
+            try {
+                const b = item.layer.getBounds();
+                boundsArray = [
+                    [b.getSouthWest().lat, b.getSouthWest().lng],
+                    [b.getNorthEast().lat, b.getNorthEast().lng]
+                ];
+            } catch (e) {
+                console.error('获取边界失败:', e);
+                boundsArray = [[0, 0], [0, 0]];
+            }
+            fd.append('bounds', JSON.stringify(boundsArray));
+            
+            // 根据文件类型添加文件
+            if (item.type === 'shapefile' && item.files) {
+                item.files.forEach((file, index) => {
+                    fd.append(`shapefile_${index}`, file);
+                });
+                fd.append('fileType', 'shapefile');
+            } else if (item.type === 'dat' && item.files) {
+                item.files.forEach((file, index) => {
+                    fd.append(`dat_${index}`, file);
+                });
+                fd.append('fileType', 'dat');
+            } else {
+                fd.append('tifFile', item.file);
+                fd.append('fileType', 'geotiff');
+            }
+
+            // 使用 XMLHttpRequest 以获取上传进度
+            const xhr = new XMLHttpRequest();
+            
+            // 监听上传进度
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    progressText.innerText = `正在上传文件... ${percentComplete}%`;
+                    progressFill.style.width = `${percentComplete}%`;
+                }
+            });
+
+            // 监听完成
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        
+                        // 触发本地下载
+                        downloadFile(URL.createObjectURL(item.file), item.file.name);
+
+                        alert('保存成功！文件已保存到数据库，并触发下载。');
+                        map.removeLayer(item.layer);
+                        pendingLayers.splice(idx, 1);
+                        renderPending();
+                        fetchDB();
+                    } catch (parseError) {
+                        console.error('解析响应失败:', parseError);
+                        alert('保存失败: 服务器响应格式错误');
+                    }
+                } else {
+                    console.error('上传失败:', xhr.status, xhr.statusText);
+                    alert('保存失败: ' + xhr.statusText);
+                }
+                // 重置进度条
+                loadingHint.style.display = 'none';
+                progressFill.style.width = '0%';
+            });
+
+            // 监听错误
+            xhr.addEventListener('error', () => {
+                console.error('网络错误');
+                alert('保存失败: 网络错误');
+                loadingHint.style.display = 'none';
+                progressFill.style.width = '0%';
+            });
+
+            // 监听超时
+            xhr.addEventListener('timeout', () => {
+                console.error('请求超时');
+                alert('保存失败: 请求超时');
+                loadingHint.style.display = 'none';
+                progressFill.style.width = '0%';
+            });
+
+            // 发送请求
+            xhr.open('POST', API_URL);
+            xhr.timeout = 3600000; // 1小时超时
+            xhr.send(fd);
+        };
+
+        // 6. 保存到数据库（带进度显示）
+        window.saveToDatabase = (id) => {
+            // 检查用户是否登录
+            if (!currentUser) {
+                alert('请先登录');
+                showLoginModal();
+                return;
+            }
+            
+            const idx = pendingLayers.findIndex(l => l.id == id);
+            const item = pendingLayers[idx];
+            const loadingHint = document.getElementById('loading-hint');
+            const progressText = loadingHint.querySelector('.progress-text');
+            const progressFill = document.getElementById('progress-fill');
+            
+            loadingHint.style.display = 'block';
+            progressText.innerText = '正在上传文件... 0%';
+            progressFill.style.width = '0%';
+
+            try {
+                const fd = new FormData();
+                fd.append('name', item.name);
+                fd.append('userId', currentUser.userId);
+                fd.append('username', currentUser.username);
+                
+                // 将 bounds 转换为简单的数组格式，避免 Leaflet 对象的复杂性
+                let boundsArray = [];
+                try {
+                    const b = item.layer.getBounds();
+                    boundsArray = [
+                        [b.getSouthWest().lat, b.getSouthWest().lng],
+                        [b.getNorthEast().lat, b.getNorthEast().lng]
+                    ];
+                } catch (e) {
+                    console.error('获取边界失败:', e);
+                    // 使用默认边界
+                    boundsArray = [[0, 0], [0, 0]];
+                }
+                fd.append('bounds', JSON.stringify(boundsArray));
+                
+                // 根据文件类型添加文件
+                if (item.type === 'shapefile' && item.files) {
+                    // 上传所有 shapefile 相关文件
+                    item.files.forEach((file, index) => {
+                        fd.append(`shapefile_${index}`, file);
+                    });
+                    fd.append('fileType', 'shapefile');
+                } else if (item.type === 'dat' && item.files) {
+                    // 上传所有 dat 相关文件
+                    item.files.forEach((file, index) => {
+                        fd.append(`dat_${index}`, file);
+                    });
+                    fd.append('fileType', 'dat');
+                } else {
+                    // 上传 GeoTIFF 文件
+                    fd.append('tifFile', item.file);
+                    fd.append('fileType', 'geotiff');
+                }
+
+                // 使用 XMLHttpRequest 以获取上传进度
+                const xhr = new XMLHttpRequest();
+                
+                // 监听上传进度
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const percentComplete = Math.round((event.loaded / event.total) * 100);
+                        progressText.innerText = `正在上传文件... ${percentComplete}%`;
+                        progressFill.style.width = `${percentComplete}%`;
+                    }
+                });
+
+                // 监听完成
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const result = JSON.parse(xhr.responseText);
+                            alert('保存成功！文件已保存到数据库。');
+                            map.removeLayer(item.layer);
+                            pendingLayers.splice(idx, 1);
+                            renderPending();
+                            fetchDB();
+                        } catch (parseError) {
+                            console.error('解析响应失败:', parseError);
+                            alert('保存失败: 服务器响应格式错误');
+                        }
+                    } else {
+                        console.error('上传失败:', xhr.status, xhr.statusText);
+                        alert('保存失败: ' + xhr.statusText);
+                    }
+                    // 重置进度条
+                    progressText.innerText = '正在处理...';
+                    progressFill.style.width = '0%';
+                    loadingHint.style.display = 'none';
+                });
+
+                // 监听错误
+                xhr.addEventListener('error', () => {
+                    console.error('网络错误');
+                    alert('保存失败: 网络错误');
+                    // 重置进度条
+                    const progressText = loadingHint.querySelector('div:first-child');
+                    const progressFill = document.getElementById('progress-fill');
+                    if (progressText) {
+                        progressText.innerText = '正在处理...';
+                    }
+                    if (progressFill) {
+                        progressFill.style.width = '0%';
+                    }
+                    loadingHint.style.display = 'none';
+                });
+
+                // 监听超时
+                xhr.addEventListener('timeout', () => {
+                    console.error('上传超时');
+                    alert('保存失败: 上传超时');
+                    // 重置进度条
+                    const progressText = loadingHint.querySelector('div:first-child');
+                    const progressFill = document.getElementById('progress-fill');
+                    if (progressText) {
+                        progressText.innerText = '正在处理...';
+                    }
+                    if (progressFill) {
+                        progressFill.style.width = '0%';
+                    }
+                    loadingHint.style.display = 'none';
+                });
+
+                // 发送请求
+                xhr.open('POST', API_URL);
+                xhr.timeout = 3600000; // 1小时超时
+                xhr.send(fd);
+
+            } catch (e) { 
+                console.error(e);
+                alert('保存失败: ' + e.message); 
+                loadingHint.style.display = 'none';
+                loadingHint.innerText = '正在处理...';
+            }
+        };
+
+        // 7. 本地下载
+        window.downloadFileLocally = (id) => {
+            const item = pendingLayers.find(l => l.id == id);
+            if (item) {
+                // 直接用 Blob 下载
+                downloadFile(URL.createObjectURL(item.file), item.file.name);
+                alert('下载已开始！');
+            }
+        };
+
+        // 通用下载函数
+        window.downloadFile = (url, filename) => {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
+        // 云端文件专用下载
+        window.downloadCloudFile = (id) => {
+            window.location.href = `/api/download?id=${id}`;
+        };
+
+        window.zoomPending = (id) => {
+            const item = pendingLayers.find(l => l.id == id);
+            if (item) {
+                try {
+                    const bounds = item.layer.getBounds();
+                    map.fitBounds(bounds, { maxZoom: 18 });
+                    setTimeout(() => map.invalidateSize(), 300);
+                } catch (e) {
+                    console.error('定位失败:', e);
+                    alert('无法定位该图层，可能是因为图层没有边界信息');
+                }
+            }
+        };
+
+        window.zoomDB = async (id) => {
+            const item = dbLayers.find(l => l._id == id);
+            if (!item) return;
+
+            // 如果图层没加载，先加载
+            if (!loadedCloudLayers[id]) {
+                await toggleCloudLayer(id);
+            }
+            
+            // 确保有坐标数据
+            if (item.bounds && item.bounds.length > 0) {
+                map.fitBounds(item.bounds, { maxZoom: 18 });
+            } else if (loadedCloudLayers[id]) {
+                // 如果数据库没存 bounds，尝试从加载后的图层获取
+                map.fitBounds(loadedCloudLayers[id].getBounds(), { maxZoom: 18 });
+            } else {
+                alert('该影像没有保存坐标信息');
+            }
+            setTimeout(() => map.invalidateSize(), 300);
+        };
+
+        // 云端图层显示/隐藏切换
+        window.toggleCloudLayer = async (id) => {
+            const item = dbLayers.find(l => l._id == id);
+            if (!item) return;
+
+            if (loadedCloudLayers[id]) {
+                // 如果已加载，则移除
+                map.removeLayer(loadedCloudLayers[id]);
+                delete loadedCloudLayers[id];
+                renderDB(document.getElementById('search-input').value);
+            } else {
+                // 如果未加载，则从服务器获取并渲染
+                document.getElementById('loading-hint').style.display = 'block';
+                const progressText = document.getElementById('loading-hint').querySelector('div:first-child');
+                if (progressText) {
+                    progressText.innerText = '正在从云端加载影像...';
+                }
+                try {
+                    // 检查文件类型
+                    if (item.fileType === 'shapefile') {
+                        // Shapefile 预览功能正在开发中
+                        showNotification('Shapefile 预览功能正在开发中，请下载后在专业软件中查看');
+                    } else if (item.fileType === 'dat') {
+                        // DAT 文件预览功能正在开发中
+                        showNotification('DAT 文件预览功能正在开发中，请下载后在专业软件中查看');
+                    } else {
+                        // 处理 GeoTIFF 文件
+                        // 使用 XMLHttpRequest 以获取进度
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', item.fileUrl);
+                        xhr.responseType = 'arraybuffer';
+                        
+                        // 超时设置
+                        xhr.timeout = 300000; // 5分钟
+                        
+                        // 进度监听
+                        xhr.addEventListener('progress', (event) => {
+                            if (event.lengthComputable) {
+                                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                                if (progressText) {
+                                    progressText.innerText = `正在从云端加载影像... ${percentComplete}%`;
+                                }
+                            }
+                        });
+                        
+                        // 完成回调
+                        const response = await new Promise((resolve, reject) => {
+                            xhr.onload = () => {
+                                if (xhr.status === 200) {
+                                    resolve(xhr.response);
+                                } else {
+                                    reject(new Error(`HTTP error! status: ${xhr.status}`));
+                                }
+                            };
+                            xhr.onerror = () => reject(new Error('Network error'));
+                            xhr.ontimeout = () => reject(new Error('Request timeout'));
+                            xhr.send();
+                        });
+                        
+                        // 解析 georaster
+                        if (progressText) {
+                            progressText.innerText = '正在解析影像...';
+                        }
+                        const georaster = await parseGeoraster(response);
+                        
+                        // 创建图层
+                        if (progressText) {
+                            progressText.innerText = '正在渲染影像...';
+                        }
+                        const layer = new GeoRasterLayer({ georaster, opacity: 0.7, resolution: 256, zIndex: 10 }).addTo(map);
+                        loadedCloudLayers[id] = layer;
+                        renderDB(document.getElementById('search-input').value);
+                    }
+                } catch (e) {
+                    console.error('加载云端影像失败:', e);
+                    alert('加载失败: ' + e.message);
+                } finally {
+                    document.getElementById('loading-hint').style.display = 'none';
+                    if (progressText) {
+                        progressText.innerText = '正在处理...';
+                    }
+                }
+            }
+        };
+
+        window.deleteDB = async (id) => {
+            // 检查用户是否登录
+            if (!currentUser) {
+                alert('请先登录');
+                showLoginModal();
+                return;
+            }
+            
+            if (!confirm('确定永久删除？')) return;
+            if (loadedCloudLayers[id]) {
+                map.removeLayer(loadedCloudLayers[id]);
+                delete loadedCloudLayers[id];
+            }
+            await fetch(`${API_URL}/${id}?userId=${currentUser.userId}`, { method: 'DELETE' });
+            fetchDB();
+        };
+
+        window.removePending = (id) => {
+            const idx = pendingLayers.findIndex(l => l.id == id);
+            map.removeLayer(pendingLayers[idx].layer);
+            pendingLayers.splice(idx, 1);
+            renderPending();
+        };
+
+        document.getElementById('search-input').oninput = (e) => renderDB(e.target.value);
+
+        fetchDB();
+    </script>
+
+    <!-- 登录模态框 -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h2>用户登录</h2>
+            <div class="form-group">
+                <label for="login-username">用户名</label>
+                <input type="text" id="login-username" class="form-control" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label for="login-password">密码</label>
+                <input type="password" id="login-password" class="form-control" placeholder="请输入密码">
+            </div>
+            <div id="login-error" class="error"></div>
+            <button class="btn" onclick="login()">登录</button>
+            <div class="link">
+                没有账号？<a href="javascript:void(0)" onclick="showRegisterModal()">立即注册</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 注册模态框 -->
+    <div id="register-modal" class="modal">
+        <div class="modal-content">
+            <h2>用户注册</h2>
+            <div class="form-group">
+                <label for="register-username">用户名</label>
+                <input type="text" id="register-username" class="form-control" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label for="register-password">密码</label>
+                <input type="password" id="register-password" class="form-control" placeholder="请输入密码">
+            </div>
+            <div class="form-group">
+                <label for="register-confirm-password">确认密码</label>
+                <input type="password" id="register-confirm-password" class="form-control" placeholder="请再次输入密码">
+            </div>
+            <div id="register-error" class="error"></div>
+            <button class="btn" onclick="register()">注册</button>
+            <div class="link">
+                已有账号？<a href="javascript:void(0)" onclick="showLoginModal()">立即登录</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 登录状态管理
+        let currentUser = null;
+
+        function loadUserFromStorage() {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                updateAuthUI();
+            }
+        }
+
+        function updateAuthUI() {
+            const authContainer = document.getElementById('auth-container');
+            if (currentUser) {
+                authContainer.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.8rem; font-weight: 500; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">${currentUser.username}</span>
+                        <button class="auth-btn" onclick="logout()" style="padding: 4px 10px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.7rem; transition: all 0.3s ease;">
+                            退出
+                        </button>
+                    </div>
+                `;
+            } else {
+                authContainer.innerHTML = `
+                    <button class="auth-btn" id="login-btn" onclick="showLoginModal()" style="padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease;">
+                        登录
+                    </button>
+                    <button class="auth-btn" id="register-btn" onclick="showRegisterModal()" style="padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease;">
+                        注册
+                    </button>
+                `;
+            }
+        }
+
+        function showLoginModal() {
+            document.getElementById('login-modal').style.display = 'flex';
+            document.getElementById('register-modal').style.display = 'none';
+        }
+
+        function showRegisterModal() {
+            document.getElementById('register-modal').style.display = 'flex';
+            document.getElementById('login-modal').style.display = 'none';
+        }
+
+        function register() {
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+            const confirmPassword = document.getElementById('register-confirm-password').value;
+            const errorElement = document.getElementById('register-error');
+            
+            if (!username || !password) {
+                errorElement.textContent = '用户名和密码不能为空';
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                errorElement.textContent = '两次输入的密码不一致';
+                return;
+            }
+            
+            fetch('/api/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    errorElement.textContent = data.error;
+                } else {
+                    errorElement.textContent = '';
+                    alert('注册成功！');
+                    document.getElementById('register-modal').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('注册失败:', error);
+                errorElement.textContent = '接口不存在';
+            });
+        }
+
+        function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const errorElement = document.getElementById('login-error');
+            
+            if (!username || !password) {
+                errorElement.textContent = '用户名和密码不能为空';
+                return;
+            }
+            
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    errorElement.textContent = data.error;
+                } else {
+                    errorElement.textContent = '';
+                    currentUser = {
+                        userId: data.userId,
+                        username: data.username
+                    };
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    updateAuthUI();
+                    document.getElementById('login-modal').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('登录失败:', error);
+                errorElement.textContent = '接口不存在';
+            });
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            updateAuthUI();
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const loginModal = document.getElementById('login-modal');
+            const registerModal = document.getElementById('register-modal');
+            if (event.target == loginModal) {
+                loginModal.style.display = 'none';
+            }
+            if (event.target == registerModal) {
+                registerModal.style.display = 'none';
+            }
+        }
+
+        // 页面加载时加载用户状态
+        loadUserFromStorage();
+    </script>
+</body>
+</html>
