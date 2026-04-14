@@ -60,8 +60,8 @@ app.use((req, res, next) => {
     next();
 });
 
-// MongoDB连接字符串 - 使用正确的集群地址
-const MONGODB_URI = 'mongodb+srv://lzw:l1913405929@cluster0.hllwgnq.mongodb.net/remote?retryWrites=true&w=majority';
+// MongoDB连接字符串 - 从环境变量中读取
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://lzw:l1913405929@cluster0.hllwgnq.mongodb.net/remote?retryWrites=true&w=majority';
 
 // 连接MongoDB
 const connectToMongoDB = () => {
