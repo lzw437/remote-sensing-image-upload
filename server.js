@@ -36,9 +36,29 @@ app.use(express.json({ limit: '5gb' }));
 // 处理 URL 编码的请求体（增加大小限制）
 app.use(express.urlencoded({ extended: true, limit: '5gb' }));
 
-// 配置 multer 存储（在 Vercel 上使用内存存储）
+// 检查是否是 Vercel 环境
+const isVercel = process.env.VERCEL === '1';
+
+// 确保 uploads 目录存在
+if (!isVercel) {
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        console.log('创建 uploads 目录');
+    }
+}
+
+// 配置 multer 存储
 const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: isVercel ? multer.memoryStorage() : multer.diskStorage({
+        destination: function (req, file, cb) {
+            cb(null, path.join(__dirname, 'uploads'));
+        },
+        filename: function (req, file, cb) {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, file.fieldname + '-' + uniqueSuffix + '-' + file.originalname);
+        }
+    }),
     limits: {
         fileSize: 5 * 1024 * 1024 * 1024 // 5GB 限制
     }
@@ -154,6 +174,10 @@ const PolygonSchema = new mongoose.Schema({
         type: Array,
         required: true
     },
+    properties: {
+        type: Object,
+        default: {}
+    },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
@@ -226,7 +250,7 @@ app.post('/api/login', async (req, res) => {
 // API 接口：保存多边形
 app.post('/api/polygons', async (req, res) => {
     try {
-        const { name, class: polygonClass, points, userId, username } = req.body;
+        const { name, class: polygonClass, points, properties, userId, username } = req.body;
         
         if (!name || !polygonClass || !points || !Array.isArray(points) || points.length < 3) {
             return res.status(400).json({ error: '多边形名称、类别和至少3个点是必需的' });
@@ -237,6 +261,7 @@ app.post('/api/polygons', async (req, res) => {
             name,
             class: polygonClass,
             points,
+            properties: properties || {},
             userId,
             username
         });
@@ -344,12 +369,22 @@ app.post('/api/images', upload.any(), async (req, res) => {
         
         let fileNames = [];
         let originalNames = [];
+        let filePaths = [];
         
-        // 处理上传的文件（在 Vercel 上使用内存存储）
+        // 处理上传的文件
         for (const file of req.files) {
-            const { originalname } = file;
+            const { originalname, path, buffer } = file;
             fileNames.push(originalname);
             originalNames.push(originalname);
+            
+            if (isVercel) {
+                // 在 Vercel 上，文件只存储在内存中
+                filePaths.push('memory:' + originalname);
+            } else {
+                // 在本地环境中，文件存储在磁盘上
+                filePaths.push(path);
+            }
+            
             console.log('文件上传成功:', originalname);
         }
         
@@ -361,14 +396,14 @@ app.post('/api/images', upload.any(), async (req, res) => {
             parsedBounds = [];
         }
         
-        // 在 Vercel 上只存储元数据，不保存文件到本地
+        // 生成文件URL
         const newImage = new Image({
             name,
             bounds: parsedBounds,
-            fileUrl: `https://remote-sensing-image-upload-597vynt9e-lzw437s-projects.vercel.app/api/download?id=${Date.now()}`, // 模拟URL
-            filePath: fileNames[0], // 存储文件名
-            filePaths: fileNames, // 所有文件名
-            fileUrls: fileNames.map(name => `https://remote-sensing-image-upload-597vynt9e-lzw437s-projects.vercel.app/api/download?name=${encodeURIComponent(name)}`), // 模拟URLs
+            fileUrl: `/api/download?id=${Date.now()}`, // 相对路径
+            filePath: filePaths[0], // 存储文件路径
+            filePaths: filePaths, // 所有文件路径
+            fileUrls: fileNames.map((name, index) => `/api/download?name=${encodeURIComponent(name)}&path=${encodeURIComponent(filePaths[index])}`), // 相对路径
             originalName: originalNames[0], // 主文件原始名称
             originalNames, // 所有原始文件名
             fileType: fileType || 'geotiff',
@@ -418,18 +453,40 @@ app.delete('/api/images/:id', async (req, res) => {
 // API 接口：下载文件
 app.get('/api/download', async (req, res) => {
     try {
-        const { id } = req.query;
-        if (!id) {
-            return res.status(400).json({ error: '缺少文件ID' });
+        const { id, name, path } = req.query;
+        
+        // 检查是否是 Vercel 环境
+        const isVercel = process.env.VERCEL === '1';
+        
+        if (isVercel) {
+            // 在 Vercel 上，文件不会保存到本地，所以无法提供下载
+            return res.status(404).json({ error: '文件下载功能在 Vercel 部署环境中不可用' });
         }
         
-        const image = await Image.findById(id);
-        if (!image) {
-            return res.status(404).json({ error: '文件不存在' });
+        if (path) {
+            // 直接通过路径下载文件
+            const filePath = decodeURIComponent(path);
+            if (fs.existsSync(filePath)) {
+                const fileName = name ? decodeURIComponent(name) : path.split('\\').pop();
+                res.download(filePath, fileName);
+            } else {
+                res.status(404).json({ error: '文件不存在' });
+            }
+        } else if (id) {
+            // 通过 ID 下载文件
+            const image = await Image.findById(id);
+            if (!image) {
+                return res.status(404).json({ error: '文件不存在' });
+            }
+            
+            if (image.filePath && fs.existsSync(image.filePath)) {
+                res.download(image.filePath, image.originalName);
+            } else {
+                res.status(404).json({ error: '文件不存在' });
+            }
+        } else {
+            return res.status(400).json({ error: '缺少文件ID或路径' });
         }
-        
-        // 在 Vercel 上，文件不会保存到本地，所以无法提供下载
-        res.status(404).json({ error: '文件下载功能在 Vercel 部署环境中不可用' });
     } catch (error) {
         console.error('下载失败:', error);
         res.status(500).json({ error: '下载失败: ' + error.message });

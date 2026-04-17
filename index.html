@@ -148,6 +148,9 @@
                                 <option value="other">其他</option>
                             </select>
                         </div>
+                        <div style="margin-top: 10px;">
+                            <button class="btn btn-sm" style="width: 100%; margin-top: 10px; background: #17a2b8; color: white;" onclick="openSymbolSystemStyle()">字段映射符号系统样式</button>
+                        </div>
                         <div style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
                             <div id="polygon-list" style="border: 1px solid #ddd; border-radius: 4px; padding: 5px;">
                                 暂无多边形
@@ -170,7 +173,7 @@
                         <input type="text" id="layer-name-input" class="form-control" placeholder="输入显示名称..." />
                         <div class="upload-btn-wrapper">
                             <button class="btn">选择并预览影像</button>
-                            <input type="file" id="upload-tif" accept=".tif,.tiff,.shp,.shx,.dbf,.prj,.cpg,.qpj,.dat,.hdr" multiple />
+                            <input type="file" id="upload-tif" accept=".tif,.tiff,.shp,.shx,.dbf,.prj,.cpg,.qpj,.dat,.hdr,.geojson" multiple />
                         </div>
                         <div id="loading-hint" class="loading-hint">
                             <div class="progress-text">正在处理...</div>
@@ -190,6 +193,78 @@
                         <ul id="pending-list" class="layer-list"></ul>
                     </div>
                     
+                    <!-- 图层窗口按钮 -->
+                    <div style="margin-bottom: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500; color: #333;">图层窗口</h5>
+                        <button class="btn" onclick="openLayerWindow()" style="width: 100%;">打开图层窗口</button>
+                    </div>
+                    
+                    <!-- 浮动图层窗口 -->
+                    <div id="floating-layer-window" style="
+                        position: fixed;
+                        top: 100px;
+                        left: 100px;
+                        width: 400px;
+                        height: 500px;
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        z-index: 1000;
+                        display: none;
+                        flex-direction: column;
+                        resize: both;
+                        overflow: auto;
+                    ">
+                        <div id="layer-window-header" style="padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background-color: #f8f9fa; cursor: move;">
+                            <h4 style="margin: 0; font-size: 16px; font-weight: 500;">图层窗口</h4>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button onclick="toggleLayerWindowLegend()" style="background: none; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer;">图例</button>
+                                <button onclick="closeLayerWindow()" style="background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+                            </div>
+                        </div>
+                        <div id="layer-window-legend" style="padding: 10px; border-bottom: 1px solid #ddd; background-color: #f9f9f9; display: none;">
+                            <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500;">图例</h5>
+                            <div id="layer-legend-content" style="max-height: 200px; overflow-y: auto;">
+                                <!-- 图例内容将通过JavaScript动态添加 -->
+                            </div>
+                        </div>
+                        <div style="padding: 15px; flex: 1; overflow-y: auto;">
+                            <div style="margin-bottom: 20px;">
+                                <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500;">上传影像</h5>
+                                <input type="text" id="layer-window-name-input" class="form-control" placeholder="输入显示名称..." style="margin-bottom: 10px;" />
+                                <div class="upload-btn-wrapper">
+                                    <button class="btn">选择影像</button>
+                                    <input type="file" id="layer-window-upload" accept=".tif,.tiff,.shp,.shx,.dbf,.prj,.cpg,.qpj,.dat,.hdr,.geojson" multiple />
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 20px;">
+                            <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500;">已加载图层</h5>
+                            <ul id="layer-window-list" class="layer-list"></ul>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 500;">GeoJSON字段映射</h5>
+                            <button class="btn" onclick="openGeoJSONSymbolSystem()" style="width: 100%; background: #17a2b8; color: white;">字段映射符号系统样式</button>
+                        </div>
+                        </div>
+                        <div style="padding: 15px; border-top: 1px solid #ddd; background-color: #f8f9fa; display: flex; justify-content: flex-end; gap: 10px;">
+                            <button class="btn" onclick="closeLayerWindow()">关闭</button>
+                            <button class="btn" onclick="clearLayerWindow()">清空图层</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 遮罩层 -->
+                    <div id="layer-window-overlay" style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0,0,0,0.5);
+                        z-index: 999;
+                        display: none;
+                    " onclick="closeLayerWindow()"></div>
+                    
                     <!-- 分割线 -->
                     <div style="border-top: 1px solid #e0e0e0; margin: 15px 0;"></div>
                     
@@ -207,6 +282,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/proj4"></script>
+    <script src="https://unpkg.com/proj4leaflet@1.0.2"></script>
     <script src="https://unpkg.com/georaster"></script>
     <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
     <script>
@@ -248,6 +324,259 @@
             }, 3000);
         }
         
+        // 图层窗口变量
+        let layerWindowLayers = [];
+        
+        // 打开图层窗口
+        function openLayerWindow() {
+            document.getElementById('floating-layer-window').style.display = 'flex';
+            document.getElementById('layer-window-overlay').style.display = 'block';
+            renderLayerWindowList();
+        }
+        
+        // 关闭图层窗口
+        function closeLayerWindow() {
+            document.getElementById('floating-layer-window').style.display = 'none';
+            document.getElementById('layer-window-overlay').style.display = 'none';
+        }
+        
+        // 切换图例显示/隐藏
+        function toggleLayerWindowLegend() {
+            const legendDiv = document.getElementById('layer-window-legend');
+            if (legendDiv.style.display === 'none') {
+                legendDiv.style.display = 'block';
+                updateLayerWindowLegend();
+            } else {
+                legendDiv.style.display = 'none';
+            }
+        }
+        
+        // 更新图例内容
+        function updateLayerWindowLegend() {
+            const legendContent = document.getElementById('layer-legend-content');
+            legendContent.innerHTML = '';
+            
+            // 遍历所有图层，添加图例
+            layerWindowLayers.forEach(layer => {
+                if (layer.type === 'geojson' && layer.style && layer.style.field) {
+                    const layerLegend = document.createElement('div');
+                    layerLegend.style.marginBottom = '15px';
+                    
+                    const layerTitle = document.createElement('h6');
+                    layerTitle.style.margin = '0 0 8px 0';
+                    layerTitle.style.fontSize = '12px';
+                    layerTitle.textContent = `${layer.name} (${layer.style.field})`;
+                    layerLegend.appendChild(layerTitle);
+                    
+                    if (layer.style.legend) {
+                        const legendList = document.createElement('ul');
+                        legendList.style.listStyle = 'none';
+                        legendList.style.padding = '0';
+                        legendList.style.margin = '0';
+                        
+                        Object.entries(layer.style.legend).forEach(([value, color]) => {
+                            const legendItem = document.createElement('li');
+                            legendItem.style.display = 'flex';
+                            legendItem.style.alignItems = 'center';
+                            legendItem.style.marginBottom = '4px';
+                            legendItem.style.fontSize = '12px';
+                            
+                            const colorBox = document.createElement('div');
+                            colorBox.style.width = '12px';
+                            colorBox.style.height = '12px';
+                            colorBox.style.backgroundColor = color;
+                            colorBox.style.border = '1px solid #ddd';
+                            colorBox.style.marginRight = '8px';
+                            
+                            const valueText = document.createTextNode(value);
+                            
+                            legendItem.appendChild(colorBox);
+                            legendItem.appendChild(valueText);
+                            legendList.appendChild(legendItem);
+                        });
+                        
+                        layerLegend.appendChild(legendList);
+                    }
+                    
+                    legendContent.appendChild(layerLegend);
+                }
+            });
+            
+            // 如果没有图例，显示提示信息
+            if (legendContent.innerHTML === '') {
+                legendContent.innerHTML = '<p style="font-size: 12px; color: #888; text-align: center;">暂无图例</p>';
+            }
+        }
+        
+        // 实现图层窗口的拖动功能
+        function initLayerWindowDrag() {
+            const window = document.getElementById('floating-layer-window');
+            const header = document.getElementById('layer-window-header');
+            
+            let isDragging = false;
+            let startX, startY, startLeft, startTop;
+            
+            header.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = parseInt(window.style.left) || 100;
+                startTop = parseInt(window.style.top) || 100;
+                
+                // 防止事件冒泡，避免影响地图的拖动
+                e.stopPropagation();
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                window.style.left = (startLeft + deltaX) + 'px';
+                window.style.top = (startTop + deltaY) + 'px';
+                
+                // 防止事件冒泡，避免影响地图的拖动
+                e.stopPropagation();
+            });
+            
+            document.addEventListener('mouseup', function() {
+                isDragging = false;
+            });
+        }
+        
+        // 页面加载完成后初始化拖动功能
+        window.addEventListener('DOMContentLoaded', initLayerWindowDrag);
+        
+        // 清空图层窗口
+        function clearLayerWindow() {
+            // 从地图中移除所有图层窗口的图层
+            layerWindowLayers.forEach(layer => {
+                if (layer.layer && map.hasLayer(layer.layer)) {
+                    map.removeLayer(layer.layer);
+                }
+            });
+            // 清空图层列表
+            layerWindowLayers = [];
+            renderLayerWindowList();
+            showNotification('图层已清空');
+        }
+        
+        // 渲染图层窗口列表
+        function renderLayerWindowList() {
+            const list = document.getElementById('layer-window-list');
+            list.innerHTML = '';
+            
+            if (layerWindowLayers.length === 0) {
+                list.innerHTML = '<li style="color: #888; text-align: center; padding: 10px;">暂无图层</li>';
+                return;
+            }
+            
+            layerWindowLayers.forEach((layer, index) => {
+                const li = document.createElement('li');
+                li.className = 'layer-item';
+                li.innerHTML = `
+                    <span class="layer-name">${layer.name}</span>
+                    <small>类型: ${layer.type || '未知'}</small>
+                    <div class="layer-actions">
+                        <button class="action-btn btn-zoom" onclick="zoomLayerWindowLayer(${index})">定位</button>
+                        <button class="action-btn btn-show" onclick="toggleLayerWindowLayer(${index})">${layer.visible ? '隐藏' : '显示'}</button>
+                        <button class="action-btn btn-del" onclick="removeLayerWindowLayer(${index})">移除</button>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+        
+        // 定位到图层窗口中的图层
+        function zoomLayerWindowLayer(index) {
+            const layer = layerWindowLayers[index];
+            if (layer && layer.layer) {
+                try {
+                    const bounds = layer.layer.getBounds();
+                    map.fitBounds(bounds, { maxZoom: 18 });
+                    setTimeout(() => map.invalidateSize(), 300);
+                } catch (e) {
+                    console.error('定位失败:', e);
+                    showNotification('无法定位该图层，可能是因为图层没有边界信息', 'error');
+                }
+            }
+        }
+        
+        // 显示/隐藏图层窗口中的图层
+        function toggleLayerWindowLayer(index) {
+            const layer = layerWindowLayers[index];
+            if (layer && layer.layer) {
+                if (map.hasLayer(layer.layer)) {
+                    map.removeLayer(layer.layer);
+                    layer.visible = false;
+                } else {
+                    map.addLayer(layer.layer);
+                    layer.visible = true;
+                }
+                renderLayerWindowList();
+            }
+        }
+        
+        // 移除图层窗口中的图层
+        function removeLayerWindowLayer(index) {
+            const layer = layerWindowLayers[index];
+            if (layer && layer.layer) {
+                if (map.hasLayer(layer.layer)) {
+                    map.removeLayer(layer.layer);
+                }
+                layerWindowLayers.splice(index, 1);
+                renderLayerWindowList();
+                showNotification('图层已移除');
+            }
+        }
+        
+        // WGS84转GCJ02坐标转换函数（解决高德地图偏移问题）
+        function wgs84togcj02(lng, lat) {
+            const pi = 3.1415926535897932384626;
+            const a = 6378245.0;
+            const ee = 0.00669342162296594323;
+            
+            if (outOfChina(lng, lat)) {
+                return [lng, lat];
+            }
+            
+            let dLat = transformLat(lng - 105.0, lat - 35.0);
+            let dLng = transformLng(lng - 105.0, lat - 35.0);
+            const radLat = lat / 180.0 * pi;
+            let magic = Math.sin(radLat);
+            magic = 1 - ee * magic * magic;
+            const sqrtMagic = Math.sqrt(magic);
+            dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi);
+            dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * pi);
+            const mgLat = lat + dLat;
+            const mgLng = lng + dLng;
+            
+            return [mgLng, mgLat];
+        }
+        
+        function transformLat(x, y) {
+            const pi = 3.1415926535897932384626;
+            let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+            ret += (20.0 * Math.sin(6.0 * x * pi) + 20.0 * Math.sin(2.0 * x * pi)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(y * pi) + 40.0 * Math.sin(y / 3.0 * pi)) * 2.0 / 3.0;
+            ret += (160.0 * Math.sin(y / 12.0 * pi) + 320 * Math.sin(y * pi / 30.0)) * 2.0 / 3.0;
+            return ret;
+        }
+        
+        function transformLng(x, y) {
+            const pi = 3.1415926535897932384626;
+            let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+            ret += (20.0 * Math.sin(6.0 * x * pi) + 20.0 * Math.sin(2.0 * x * pi)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(x * pi) + 40.0 * Math.sin(x / 3.0 * pi)) * 2.0 / 3.0;
+            ret += (150.0 * Math.sin(x / 12.0 * pi) + 300.0 * Math.sin(x * pi / 30.0)) * 2.0 / 3.0;
+            return ret;
+        }
+        
+        function outOfChina(lng, lat) {
+            return (lng < 73.66 || lng > 135.05 || lat < 3.86 || lat > 53.55);
+        }
+        
         // 页面加载时关闭所有下拉列表
         window.addEventListener('load', function() {
             // 关闭所有下拉列表
@@ -275,6 +604,10 @@
         const sidebar = document.querySelector('.sidebar');
         L.DomEvent.disableClickPropagation(sidebar);
         L.DomEvent.disableScrollPropagation(sidebar);
+
+        // 投影定义
+        proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs');
+        proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
 
         // 底图配置
         const gaodeOptions = { subdomains: '1234', zIndex: 0, maxZoom: 18 };
@@ -594,19 +927,20 @@
             showNotification('正在保存多边形到数据库...');
             
             // 发送到服务器
-            fetch('/api/polygons', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: name,
-                    class: polygonClass,
-                    points: currentPolygonPoints,
-                    userId: user ? user.userId : null,
-                    username: user ? user.username : '匿名'
+                fetch('/api/polygons', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        class: polygonClass,
+                        points: currentPolygonPoints,
+                        properties: {}, // 这里可以根据需要添加属性
+                        userId: user ? user.userId : null,
+                        username: user ? user.username : '匿名'
+                    })
                 })
-            })
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -618,6 +952,7 @@
                         name: data.polygon.name,
                         class: data.polygon.class,
                         points: data.polygon.points,
+                        properties: data.polygon.properties || {},
                         layer: currentPolygon,
                         userId: data.polygon.userId // 保存用户ID
                     };
@@ -836,6 +1171,7 @@
                                 name: polygonData.name,
                                 class: polygonData.class,
                                 points: polygonData.points,
+                                properties: polygonData.properties || {},
                                 layer: layer,
                                 userId: polygonData.userId // 保存用户ID
                             });
@@ -882,19 +1218,23 @@
                 const isLoaded = !!loadedCloudLayers[i._id];
                 const li = document.createElement('li');
                 li.className = 'layer-item saved';
+                li.style.cursor = 'pointer';
+                
+                // 点击影像打开预览
+                li.onclick = () => openLayerPreview(i);
                 
                 // 检查用户是否有权限删除
                 const canDelete = currentUser && i.userId && i.userId.toString() === currentUser.userId;
-                const deleteButton = canDelete ? `<button class="action-btn btn-del" onclick="deleteDB('${i._id}')">删除</button>` : '';
+                const deleteButton = canDelete ? `<button class="action-btn btn-del" onclick="event.stopPropagation(); deleteDB('${i._id}')">删除</button>` : '';
                 
                 li.innerHTML = `
                     <span class="layer-name">${i.name}</span>
                     <small>上传者: ${i.username || '未知'}</small><br>
                     <small>类型: ${i.fileType || '未知'}</small>
                     <div class="layer-actions">
-                        <button class="action-btn btn-zoom" onclick="zoomDB('${i._id}')">定位</button>
-                        <button class="action-btn btn-show" onclick="toggleCloudLayer('${i._id}')">${isLoaded ? '关闭' : '显示'}</button>
-                        <button class="action-btn btn-dl" onclick="downloadCloudFile('${i._id}')">下载</button>
+                        <button class="action-btn btn-zoom" onclick="event.stopPropagation(); zoomDB('${i._id}')">定位</button>
+                        <button class="action-btn btn-show" onclick="event.stopPropagation(); toggleCloudLayer('${i._id}')">${isLoaded ? '关闭' : '显示'}</button>
+                        <button class="action-btn btn-dl" onclick="event.stopPropagation(); downloadCloudFile('${i._id}')">下载</button>
                         ${deleteButton}
                     </div>
                 `;
@@ -946,6 +1286,8 @@
                 const hasShapefile = files.some(file => file.name.toLowerCase().endsWith('.shp'));
                 // 检查是否包含 dat 文件
                 const hasDatFile = files.some(file => file.name.toLowerCase().endsWith('.dat'));
+                // 检查是否包含 geojson 文件
+                const hasGeoJSON = files.some(file => file.name.toLowerCase().endsWith('.geojson'));
                 
                 if (hasShapefile) {
                     // 处理 shapefile 文件
@@ -990,6 +1332,115 @@
                         progressFill.style.width = '0%';
                         showNotification('DAT 文件已添加到上传列表，请点击保存到数据库以上传所有相关文件');
                     }, 500);
+                } else if (hasGeoJSON) {
+                    // 处理 GeoJSON 文件
+                    const geojsonFile = files.find(file => file.name.toLowerCase().endsWith('.geojson'));
+                    if (geojsonFile) {
+                        // 显示进度条
+                        progressText.innerText = '正在处理 GeoJSON 文件...';
+                        progressFill.style.width = '50%';
+                        
+                        const reader = new FileReader();
+                        
+                        reader.onload = (ev) => {
+                            try {
+                                const geojsonData = JSON.parse(ev.target.result);
+                                
+                                // 创建 GeoJSON 图层
+                                const layer = L.geoJSON(geojsonData, {
+                                    style: function(feature) {
+                                        return {
+                                            color: '#3388ff',
+                                            weight: 2,
+                                            opacity: 0.7,
+                                            fillOpacity: 0.2
+                                        };
+                                    },
+                                    onEachFeature: function(feature, layer) {
+                                        if (feature.properties) {
+                                            const popupContent = Object.entries(feature.properties)
+                                                .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                                                .join('<br>');
+                                            layer.bindPopup(popupContent);
+                                        }
+                                    },
+                                    coordsToLatLng: function(coords) {
+                                        // 处理不同坐标系的GeoJSON
+                                        let lat, lng;
+                                        
+                                        // 检查坐标格式
+                                        if (coords.length === 2) {
+                                            // 检查是否是[lon, lat]格式（WGS84标准）
+                                            if (Math.abs(coords[0]) <= 180 && Math.abs(coords[1]) <= 90) {
+                                                lng = coords[0];
+                                                lat = coords[1];
+                                            }
+                                            // 检查是否是[lat, lon]格式
+                                            else if (Math.abs(coords[1]) <= 180 && Math.abs(coords[0]) <= 90) {
+                                                lat = coords[0];
+                                                lng = coords[1];
+                                            }
+                                            // 检查是否是墨卡托投影坐标（米为单位）
+                                            else if (Math.abs(coords[0]) > 180 || Math.abs(coords[1]) > 90) {
+                                                // 墨卡托坐标转经纬度
+                                                const point = L.point(coords[0], coords[1]);
+                                                const latlng = map.unproject(point, map.getMaxZoom());
+                                                lat = latlng.lat;
+                                                lng = latlng.lng;
+                                            }
+                                        }
+                                        
+                                        // 如果有有效的经纬度
+                                        if (lat !== undefined && lng !== undefined) {
+                                            // 检查当前底图是否是高德地图
+                                            const currentBasemapName = document.getElementById('basemap-select').value;
+                                            if (currentBasemapName === 'gaode' || currentBasemapName === 'gaodeImg') {
+                                                // 高德地图使用GCJ02坐标系，需要WGS84转GCJ02
+                                                const gcjCoords = wgs84togcj02(lng, lat);
+                                                return new L.LatLng(gcjCoords[1], gcjCoords[0]);
+                                            } else {
+                                                // 其他底图使用WGS84坐标系
+                                                return new L.LatLng(lat, lng);
+                                            }
+                                        }
+                                        
+                                        return L.GeoJSON.coordsToLatLng(coords);
+                                    }
+                                }).addTo(map);
+                                
+                                // 调整地图视图以显示 GeoJSON
+                                map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+                                
+                                // 添加到预览列表
+                                pendingLayers.push({ id: Date.now(), name, layer, file: geojsonFile, type: 'geojson' });
+                                renderPending();
+                                document.getElementById('layer-name-input').value = '';
+                                setTimeout(() => map.invalidateSize(), 500);
+                                
+                                // 完成
+                                progressFill.style.width = '100%';
+                                setTimeout(() => {
+                                    loadingHint.style.display = 'none';
+                                    progressFill.style.width = '0%';
+                                    showNotification('GeoJSON 文件已成功加载并显示在地图上');
+                                }, 500);
+                            } catch (err) {
+                                console.error(err);
+                                showNotification('GeoJSON 解析失败，请确保是有效的 GeoJSON 文件', 'error');
+                                loadingHint.style.display = 'none';
+                                progressFill.style.width = '0%';
+                            }
+                        };
+                        
+                        reader.onerror = () => {
+                            showNotification('文件读取失败', 'error');
+                            loadingHint.style.display = 'none';
+                            progressFill.style.width = '0%';
+                        };
+                        
+                        reader.readAsText(geojsonFile);
+                        return; // 异步操作，不执行下面的 finally
+                    }
                 } else {
                     // 处理 GeoTIFF 文件
                     const tifFile = files[0];
@@ -1041,6 +1492,211 @@
                 progressFill.style.width = '0%';
             }
         };
+        
+        // 图层窗口文件上传
+        document.getElementById('layer-window-upload').onchange = async (e) => {
+            const files = Array.from(e.target.files);
+            const name = document.getElementById('layer-window-name-input').value || `图层_${Date.now()}`;
+            
+            if (files.length === 0) return;
+            
+            try {
+                // 检查是否包含 shapefile 文件
+                const hasShapefile = files.some(file => file.name.toLowerCase().endsWith('.shp'));
+                // 检查是否包含 dat 文件
+                const hasDat = files.some(file => file.name.toLowerCase().endsWith('.dat'));
+                // 检查是否包含 geojson 文件
+                const hasGeoJSON = files.some(file => file.name.toLowerCase().endsWith('.geojson'));
+                
+                if (hasShapefile) {
+                    // 处理 Shapefile 文件
+                    const shpFile = files.find(file => file.name.toLowerCase().endsWith('.shp'));
+                    const shxFile = files.find(file => file.name.toLowerCase().endsWith('.shx'));
+                    const dbfFile = files.find(file => file.name.toLowerCase().endsWith('.dbf'));
+                    const prjFile = files.find(file => file.name.toLowerCase().endsWith('.prj'));
+                    
+                    if (!shpFile || !shxFile || !dbfFile) {
+                        showNotification('Shapefile 文件不完整，至少需要 .shp、.shx 和 .dbf 文件', 'error');
+                        return;
+                    }
+                    
+                    // 显示通知
+                    showNotification('Shapefile 文件已添加到图层窗口');
+                    
+                    // 添加到图层窗口列表
+                    layerWindowLayers.push({
+                        id: Date.now(),
+                        name,
+                        type: 'shapefile',
+                        files: [shpFile, shxFile, dbfFile, prjFile].filter(Boolean),
+                        visible: false
+                    });
+                    renderLayerWindowList();
+                } else if (hasDat) {
+                    // 处理 DAT 文件
+                    const datFile = files.find(file => file.name.toLowerCase().endsWith('.dat'));
+                    const hdrFile = files.find(file => file.name.toLowerCase().endsWith('.hdr'));
+                    
+                    if (!datFile) {
+                        showNotification('请选择 .dat 文件', 'error');
+                        return;
+                    }
+                    
+                    // 显示通知
+                    showNotification('DAT 文件已添加到图层窗口');
+                    
+                    // 添加到图层窗口列表
+                    layerWindowLayers.push({
+                        id: Date.now(),
+                        name,
+                        type: 'dat',
+                        files: [datFile, hdrFile].filter(Boolean),
+                        visible: false
+                    });
+                    renderLayerWindowList();
+                } else if (hasGeoJSON) {
+                    // 处理 GeoJSON 文件
+                    const geojsonFile = files.find(file => file.name.toLowerCase().endsWith('.geojson'));
+                    if (geojsonFile) {
+                        const reader = new FileReader();
+                        
+                        reader.onload = (ev) => {
+                            try {
+                                const geojsonData = JSON.parse(ev.target.result);
+                                
+                                // 创建 GeoJSON 图层
+                                const layer = L.geoJSON(geojsonData, {
+                                    style: function(feature) {
+                                        return {
+                                            color: '#3388ff',
+                                            weight: 2,
+                                            opacity: 0.7,
+                                            fillOpacity: 0.2
+                                        };
+                                    },
+                                    onEachFeature: function(feature, layer) {
+                                        if (feature.properties) {
+                                            const popupContent = Object.entries(feature.properties)
+                                                .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                                                .join('<br>');
+                                            layer.bindPopup(popupContent);
+                                        }
+                                    },
+                                    coordsToLatLng: function(coords) {
+                                        // 处理不同坐标系的GeoJSON
+                                        let lat, lng;
+                                        
+                                        // 检查坐标格式
+                                        if (coords.length === 2) {
+                                            // 检查是否是[lon, lat]格式（WGS84标准）
+                                            if (Math.abs(coords[0]) <= 180 && Math.abs(coords[1]) <= 90) {
+                                                lng = coords[0];
+                                                lat = coords[1];
+                                            }
+                                            // 检查是否是[lat, lon]格式
+                                            else if (Math.abs(coords[1]) <= 180 && Math.abs(coords[0]) <= 90) {
+                                                lat = coords[0];
+                                                lng = coords[1];
+                                            }
+                                            // 检查是否是墨卡托投影坐标（米为单位）
+                                            else if (Math.abs(coords[0]) > 180 || Math.abs(coords[1]) > 90) {
+                                                // 墨卡托坐标转经纬度
+                                                const point = L.point(coords[0], coords[1]);
+                                                const latlng = map.unproject(point, map.getMaxZoom());
+                                                lat = latlng.lat;
+                                                lng = latlng.lng;
+                                            }
+                                        }
+                                        
+                                        // 如果有有效的经纬度
+                                        if (lat !== undefined && lng !== undefined) {
+                                            // 检查当前底图是否是高德地图
+                                            const currentBasemapName = document.getElementById('basemap-select').value;
+                                            if (currentBasemapName === 'gaode' || currentBasemapName === 'gaodeImg') {
+                                                // 高德地图使用GCJ02坐标系，需要WGS84转GCJ02
+                                                const gcjCoords = wgs84togcj02(lng, lat);
+                                                return new L.LatLng(gcjCoords[1], gcjCoords[0]);
+                                            } else {
+                                                // 其他底图使用WGS84坐标系
+                                                return new L.LatLng(lat, lng);
+                                            }
+                                        }
+                                        
+                                        return L.GeoJSON.coordsToLatLng(coords);
+                                    }
+                                }).addTo(map);
+                                
+                                // 调整地图视图以显示 GeoJSON
+                                map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+                                
+                                // 添加到图层窗口列表
+                                layerWindowLayers.push({
+                                    id: Date.now(),
+                                    name,
+                                    type: 'geojson',
+                                    layer,
+                                    file: geojsonFile,
+                                    visible: true
+                                });
+                                renderLayerWindowList();
+                                document.getElementById('layer-window-name-input').value = '';
+                                setTimeout(() => map.invalidateSize(), 500);
+                                
+                                showNotification('GeoJSON 文件已成功加载并显示在地图上');
+                            } catch (err) {
+                                console.error(err);
+                                showNotification('GeoJSON 解析失败，请确保是有效的 GeoJSON 文件', 'error');
+                            }
+                        };
+                        
+                        reader.onerror = () => {
+                            showNotification('文件读取失败', 'error');
+                        };
+                        
+                        reader.readAsText(geojsonFile);
+                    }
+                } else {
+                    // 处理 GeoTIFF 文件
+                    const tifFile = files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = async (ev) => {
+                        try {
+                            const georaster = await parseGeoraster(ev.target.result);
+                            const layer = new GeoRasterLayer({ georaster, opacity: 0.7, resolution: 256, zIndex: 10 }).addTo(map);
+                            map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+                            
+                            // 添加到图层窗口列表
+                            layerWindowLayers.push({
+                                id: Date.now(),
+                                name,
+                                type: 'geotiff',
+                                layer,
+                                file: tifFile,
+                                visible: true
+                            });
+                            renderLayerWindowList();
+                            document.getElementById('layer-window-name-input').value = '';
+                            setTimeout(() => map.invalidateSize(), 500);
+                            
+                            showNotification('GeoTIFF 文件已成功加载并显示在地图上');
+                        } catch (err) { 
+                            console.error(err);
+                            showNotification('影像解析失败，请确保是标准的 GeoTIFF 文件', 'error');
+                        }
+                    };
+                    
+                    reader.onerror = () => {
+                        showNotification('文件读取失败', 'error');
+                    };
+                    
+                    reader.readAsArrayBuffer(tifFile);
+                }
+            } catch (err) {
+                console.error(err);
+                showNotification('文件处理失败: ' + err.message, 'error');
+            }
+        }
 
         // 5. 下载并同步（带进度显示）
         window.saveAndDownload = (id) => {
@@ -1082,6 +1738,9 @@
                     fd.append(`dat_${index}`, file);
                 });
                 fd.append('fileType', 'dat');
+            } else if (item.type === 'geojson' && item.file) {
+                fd.append('geojsonFile', item.file);
+                fd.append('fileType', 'geojson');
             } else {
                 fd.append('tifFile', item.file);
                 fd.append('fileType', 'geotiff');
@@ -1417,7 +2076,7 @@
                         if (progressText) {
                             progressText.innerText = '正在渲染影像...';
                         }
-                        const layer = new GeoRasterLayer({ georaster, opacity: 0.7, resolution: 256, zIndex: 10 }).addTo(map);
+                        const layer = new GeoRasterLayer({ georaster, opacity: 0.7, resolution: 256, zIndex: 10, interactive: false }).addTo(map);
                         loadedCloudLayers[id] = layer;
                         renderDB(document.getElementById('search-input').value);
                     }
@@ -1458,6 +2117,250 @@
         };
 
         document.getElementById('search-input').oninput = (e) => renderDB(e.target.value);
+
+        // 打开图层预览
+        function openLayerPreview(item) {
+            // 定位到图层
+            zoomDB(item._id);
+        }
+
+        // GeoJSON字段映射符号系统样式
+        function openGeoJSONSymbolSystem() {
+            document.getElementById('geojson-symbol-system-window').style.display = 'flex';
+            document.getElementById('geojson-symbol-system-overlay').style.display = 'block';
+            
+            // 加载GeoJSON图层选项
+            loadGeoJSONLayers();
+        }
+
+        function closeGeoJSONSymbolSystem() {
+            document.getElementById('geojson-symbol-system-window').style.display = 'none';
+            document.getElementById('geojson-symbol-system-overlay').style.display = 'none';
+        }
+
+        function loadGeoJSONLayers() {
+            const layerSelect = document.getElementById('geojson-layer-select');
+            layerSelect.innerHTML = '<option value="">选择图层</option>';
+            
+            // 加载图层窗口中的GeoJSON图层
+            layerWindowLayers.forEach((layer, index) => {
+                if (layer.type === 'geojson' && layer.layer) {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = layer.name;
+                    layerSelect.appendChild(option);
+                }
+            });
+            
+            // 加载上传的GeoJSON图层
+            pendingLayers.forEach((layer, index) => {
+                if (layer.type === 'geojson' && layer.layer) {
+                    const option = document.createElement('option');
+                    option.value = `pending-${index}`;
+                    option.textContent = `${layer.name} (待保存)`;
+                    layerSelect.appendChild(option);
+                }
+            });
+            
+            // 加载数据库中的GeoJSON图层
+            dbLayers.forEach((layer, index) => {
+                if (layer.fileType === 'geojson') {
+                    const option = document.createElement('option');
+                    option.value = `db-${layer._id}`;
+                    option.textContent = layer.name;
+                    layerSelect.appendChild(option);
+                }
+            });
+        }
+
+        // 为GeoJSON图层选择添加事件监听器
+        function setupGeoJSONLayerSelect() {
+            const layerSelect = document.getElementById('geojson-layer-select');
+            if (layerSelect) {
+                layerSelect.onchange = function() {
+                    const selectedValue = this.value;
+                    const fieldSelect = document.getElementById('geojson-field-select');
+                    fieldSelect.innerHTML = '<option value="">选择字段</option>';
+                    
+                    if (!selectedValue) return;
+                    
+                    let layer;
+                    if (selectedValue.startsWith('pending-')) {
+                        // 从待保存图层中获取
+                        const index = parseInt(selectedValue.split('-')[1]);
+                        layer = pendingLayers[index];
+                    } else if (selectedValue.startsWith('db-')) {
+                        // 从数据库图层中获取
+                        const id = selectedValue.split('-')[1];
+                        layer = dbLayers.find(l => l._id === id);
+                    } else {
+                        // 从图层窗口中获取
+                        const index = parseInt(selectedValue);
+                        layer = layerWindowLayers[index];
+                    }
+                    
+                    if (layer && layer.layer) {
+                        // 提取GeoJSON数据中的属性字段
+                        const fields = new Set();
+                        try {
+                            if (layer.layer._layers) {
+                                // 对于Leaflet GeoJSON图层
+                                for (const layerId in layer.layer._layers) {
+                                    const feature = layer.layer._layers[layerId].feature;
+                                    if (feature && feature.properties) {
+                                        Object.keys(feature.properties).forEach(key => {
+                                            fields.add(key);
+                                        });
+                                        break; // 只需要第一个特征的字段
+                                    }
+                                }
+                            } else if (layer.layer.feature) {
+                                // 对于单个特征图层
+                                const feature = layer.layer.feature;
+                                if (feature && feature.properties) {
+                                    Object.keys(feature.properties).forEach(key => {
+                                        fields.add(key);
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.error('提取GeoJSON字段失败:', e);
+                        }
+                        
+                        // 添加字段选项
+                        Array.from(fields).forEach(field => {
+                            const option = document.createElement('option');
+                            option.value = field;
+                            option.textContent = field;
+                            fieldSelect.appendChild(option);
+                        });
+                    }
+                };
+            }
+        }
+        
+        // 页面加载完成后设置事件监听器
+        window.addEventListener('DOMContentLoaded', setupGeoJSONLayerSelect);
+
+        function applyGeoJSONSymbolSystem() {
+            const selectedValue = document.getElementById('geojson-layer-select').value;
+            const field = document.getElementById('geojson-field-select').value;
+            const styleType = document.getElementById('geojson-style-select').value;
+            
+            if (!selectedValue || !field) {
+                showNotification('请选择图层和字段', 'warning');
+                return;
+            }
+            
+            let layer, layerIndex, layerArray;
+            if (selectedValue.startsWith('pending-')) {
+                // 从待保存图层中获取
+                const index = parseInt(selectedValue.split('-')[1]);
+                layer = pendingLayers[index];
+                layerIndex = index;
+                layerArray = pendingLayers;
+            } else if (selectedValue.startsWith('db-')) {
+                // 从数据库图层中获取
+                const id = selectedValue.split('-')[1];
+                layer = dbLayers.find(l => l._id === id);
+                if (layer && loadedCloudLayers[id]) {
+                    layer = { ...layer, layer: loadedCloudLayers[id] };
+                }
+            } else {
+                // 从图层窗口中获取
+                const index = parseInt(selectedValue);
+                layer = layerWindowLayers[index];
+                layerIndex = index;
+                layerArray = layerWindowLayers;
+            }
+            
+            if (layer && layer.layer) {
+                try {
+                    // 收集所有唯一值并生成图例
+                    const uniqueValues = new Set();
+                    if (layer.layer._layers) {
+                        for (const layerId in layer.layer._layers) {
+                            const feature = layer.layer._layers[layerId].feature;
+                            if (feature && feature.properties) {
+                                const value = feature.properties[field];
+                                if (value !== undefined && value !== null) {
+                                    uniqueValues.add(value);
+                                }
+                            }
+                        }
+                    } else if (layer.layer.feature) {
+                        const feature = layer.layer.feature;
+                        if (feature && feature.properties) {
+                            const value = feature.properties[field];
+                            if (value !== undefined && value !== null) {
+                                uniqueValues.add(value);
+                            }
+                        }
+                    }
+                    
+                    // 生成图例
+                    const legend = {};
+                    Array.from(uniqueValues).forEach(value => {
+                        legend[value] = getColorForValue(value, styleType);
+                    });
+                    
+                    // 保存样式信息到图层对象
+                    if (layerArray && layerIndex !== undefined) {
+                        layerArray[layerIndex].style = {
+                            field: field,
+                            styleType: styleType,
+                            legend: legend
+                        };
+                    }
+                    
+                    // 应用样式到GeoJSON图层
+                    if (layer.layer._layers) {
+                        // 对于Leaflet GeoJSON图层
+                        for (const layerId in layer.layer._layers) {
+                            const featureLayer = layer.layer._layers[layerId];
+                            const feature = featureLayer.feature;
+                            
+                            if (feature && feature.properties) {
+                                const value = feature.properties[field];
+                                if (value !== undefined && value !== null) {
+                                    const color = getColorForValue(value, styleType);
+                                    featureLayer.setStyle({
+                                        color: color,
+                                        fillColor: color,
+                                        fillOpacity: 0.3
+                                    });
+                                }
+                            }
+                        }
+                    } else if (layer.layer.feature) {
+                        // 对于单个特征图层
+                        const feature = layer.layer.feature;
+                        if (feature && feature.properties) {
+                            const value = feature.properties[field];
+                            if (value !== undefined && value !== null) {
+                                const color = getColorForValue(value, styleType);
+                                layer.layer.setStyle({
+                                    color: color,
+                                    fillColor: color,
+                                    fillOpacity: 0.3
+                                });
+                            }
+                        }
+                    }
+                    
+                    showNotification('符号系统样式已应用', 'success');
+                    closeGeoJSONSymbolSystem();
+                    
+                    // 更新图例
+                    updateLayerWindowLegend();
+                } catch (e) {
+                    console.error('应用GeoJSON样式失败:', e);
+                    showNotification('应用样式失败: ' + e.message, 'error');
+                }
+            } else {
+                showNotification('无法找到选中的图层', 'error');
+            }
+        }
 
         fetchDB();
     </script>
@@ -1649,5 +2552,291 @@
         // 页面加载时加载用户状态
         loadUserFromStorage();
     </script>
+    
+    <script>
+        // 字段映射符号系统样式
+        function openSymbolSystemStyle() {
+            document.getElementById('symbol-system-window').style.display = 'flex';
+            document.getElementById('symbol-system-overlay').style.display = 'block';
+            
+            // 加载多边形属性字段
+            loadPolygonFields();
+        }
+        
+        function closeSymbolSystemStyle() {
+            document.getElementById('symbol-system-window').style.display = 'none';
+            document.getElementById('symbol-system-overlay').style.display = 'none';
+        }
+        
+        function loadPolygonFields() {
+            const fieldSelect = document.getElementById('symbol-field-select');
+            fieldSelect.innerHTML = '<option value="">选择字段</option>';
+            
+            const fields = new Set(['class', 'name']);
+            
+            // 从多边形数据中提取字段
+            if (polygons.length > 0) {
+                const firstPolygon = polygons[0];
+                if (firstPolygon.properties) {
+                    Object.keys(firstPolygon.properties).forEach(key => {
+                        fields.add(`properties.${key}`);
+                    });
+                }
+            }
+            
+            // 从上传的JSON数据中提取字段
+            const jsonLayers = pendingLayers.filter(item => item.type === 'geojson' && item.layer);
+            if (jsonLayers.length > 0) {
+                const firstJsonLayer = jsonLayers[0];
+                // 尝试从GeoJSON图层中提取properties字段
+                try {
+                    // 获取GeoJSON数据
+                    const geojsonData = firstJsonLayer.layer._layers;
+                    for (const layerId in geojsonData) {
+                        const feature = geojsonData[layerId].feature;
+                        if (feature && feature.properties) {
+                            Object.keys(feature.properties).forEach(key => {
+                                fields.add(`properties.${key}`);
+                            });
+                            break; // 只需要第一个特征的字段
+                        }
+                    }
+                } catch (e) {
+                    console.error('提取JSON字段失败:', e);
+                }
+            }
+            
+            // 添加字段选项
+            Array.from(fields).forEach(field => {
+                const option = document.createElement('option');
+                option.value = field;
+                option.textContent = field;
+                fieldSelect.appendChild(option);
+            });
+        }
+        
+        function applySymbolSystemStyle() {
+            const field = document.getElementById('symbol-field-select').value;
+            const styleType = document.getElementById('symbol-style-select').value;
+            
+            if (!field) {
+                showNotification('请选择字段', 'warning');
+                return;
+            }
+            
+            // 应用样式到多边形
+            polygons.forEach(polygon => {
+                if (polygon.layer) {
+                    let value;
+                    if (field === 'class') {
+                        value = polygon.class;
+                    } else if (field === 'name') {
+                        value = polygon.name;
+                    } else if (field.startsWith('properties.')) {
+                        const propName = field.replace('properties.', '');
+                        value = polygon.properties ? polygon.properties[propName] : null;
+                    }
+                    
+                    if (value) {
+                        // 根据字段值设置颜色
+                        const color = getColorForValue(value, styleType);
+                        polygon.layer.setStyle({
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 0.3
+                        });
+                    }
+                }
+            });
+            
+            // 应用样式到上传的JSON数据（GeoJSON图层）
+            const jsonLayers = pendingLayers.filter(item => item.type === 'geojson' && item.layer);
+            jsonLayers.forEach(jsonLayer => {
+                try {
+                    // 遍历GeoJSON图层中的所有特征
+                    const geojsonData = jsonLayer.layer._layers;
+                    for (const layerId in geojsonData) {
+                        const featureLayer = geojsonData[layerId];
+                        const feature = featureLayer.feature;
+                        
+                        if (feature) {
+                            let value;
+                            if (field === 'class') {
+                                // 对于GeoJSON，使用默认值或从properties中获取
+                                value = feature.properties ? feature.properties.class : 'other';
+                            } else if (field === 'name') {
+                                // 对于GeoJSON，使用默认值或从properties中获取
+                                value = feature.properties ? feature.properties.name : '未命名';
+                            } else if (field.startsWith('properties.')) {
+                                const propName = field.replace('properties.', '');
+                                value = feature.properties ? feature.properties[propName] : null;
+                            }
+                            
+                            if (value) {
+                                // 根据字段值设置颜色
+                                const color = getColorForValue(value, styleType);
+                                featureLayer.setStyle({
+                                    color: color,
+                                    fillColor: color,
+                                    fillOpacity: 0.3
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('应用JSON样式失败:', e);
+                }
+            });
+            
+            showNotification('符号系统样式已应用', 'success');
+            closeSymbolSystemStyle();
+        }
+        
+        function getColorForValue(value, styleType) {
+            // 预定义颜色列表
+            const colors = [
+                '#ff6384', '#36a2eb', '#4bc0c0', '#9966ff', '#ffcd56',
+                '#ff9f40', '#8ac4d0', '#f8b500', '#43aa8b', '#577590'
+            ];
+            
+            // 根据值生成哈希值
+            let hash = 0;
+            for (let i = 0; i < value.toString().length; i++) {
+                hash = value.toString().charCodeAt(i) + ((hash << 5) - hash);
+            }
+            
+            // 根据哈希值选择颜色
+            const index = Math.abs(hash) % colors.length;
+            return colors[index];
+        }
+    </script>
+    
+    <!-- 字段映射符号系统样式窗口 -->
+    <div id="symbol-system-window" style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 500px;
+        height: 400px;
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+    ">
+        <div style="padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background-color: #f8f9fa;">
+            <h4 style="margin: 0; font-size: 16px; font-weight: 500;">字段映射符号系统样式</h4>
+            <button onclick="closeSymbolSystemStyle()" style="background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: 20px; flex: 1; overflow-y: auto;">
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">选择属性</label>
+                <select id="symbol-field-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">选择字段</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">选择样式</label>
+                <select id="symbol-style-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="category">类别样式</option>
+                    <option value="unique">唯一值样式</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">样式预览</label>
+                <div id="symbol-preview" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; min-height: 100px; background-color: #f8f9fa;">
+                    选择字段后将显示样式预览
+                </div>
+            </div>
+        </div>
+        <div style="padding: 15px; border-top: 1px solid #ddd; background-color: #f8f9fa; display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn" onclick="closeSymbolSystemStyle()">取消</button>
+            <button class="btn" style="background: #17a2b8; color: white;" onclick="applySymbolSystemStyle()">应用</button>
+        </div>
+    </div>
+    
+    <!-- 遮罩层 -->
+    <div id="symbol-system-overlay" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 999;
+        display: none;
+    " onclick="closeSymbolSystemStyle()"></div>
+    
+    <!-- GeoJSON字段映射符号系统样式窗口 -->
+    <div id="geojson-symbol-system-window" style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 500px;
+        height: 400px;
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+    ">
+        <div style="padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background-color: #f8f9fa;">
+            <h4 style="margin: 0; font-size: 16px; font-weight: 500;">GeoJSON字段映射符号系统样式</h4>
+            <button onclick="closeGeoJSONSymbolSystem()" style="background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: 20px; flex: 1; overflow-y: auto;">
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">选择GeoJSON图层</label>
+                <select id="geojson-layer-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">选择图层</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">选择属性</label>
+                <select id="geojson-field-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">选择字段</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500;">选择样式</label>
+                <select id="geojson-style-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="category">类别样式</option>
+                    <option value="unique">唯一值样式</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500;">样式预览</label>
+                <div id="geojson-symbol-preview" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; min-height: 100px; background-color: #f8f9fa;">
+                    选择字段后将显示样式预览
+                </div>
+            </div>
+        </div>
+        <div style="padding: 15px; border-top: 1px solid #ddd; background-color: #f8f9fa; display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn" onclick="closeGeoJSONSymbolSystem()">取消</button>
+            <button class="btn" style="background: #17a2b8; color: white;" onclick="applyGeoJSONSymbolSystem()">应用</button>
+        </div>
+    </div>
+    
+    <!-- 遮罩层 -->
+    <div id="geojson-symbol-system-overlay" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 999;
+        display: none;
+    " onclick="closeGeoJSONSymbolSystem()"></div>
 </body>
 </html>
